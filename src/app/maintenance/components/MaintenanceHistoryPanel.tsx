@@ -1,7 +1,8 @@
 'use client';
 import React from 'react';
 import { X, Clock, Wrench, User, Calendar } from 'lucide-react';
-import { MaintenanceRecord } from '@/lib/machineData';
+import { MaintenanceRecord } from '@/lib/maintenanceTypes';
+import { useAppSettings } from '@/lib/AppSettingsContext';
 
 interface Props {
   machineId: string;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function MaintenanceHistoryPanel({ machineId, records, onClose }: Props) {
+  const { money } = useAppSettings();
   const machineRecords = records
     .filter(r => r.machineId === machineId)
     .sort((a, b) => new Date(b.maintenanceDate).getTime() - new Date(a.maintenanceDate).getTime());
@@ -97,7 +99,7 @@ export default function MaintenanceHistoryPanel({ machineId, records, onClose }:
 
                     {r.costOfMaintenance && (
                       <div className="mt-2 pt-2 border-t border-border text-xs text-muted-foreground">
-                        Cost: <span className="font-600 text-foreground">Rs. {r.costOfMaintenance.toLocaleString()}</span>
+                        Cost: <span className="font-600 text-foreground">{money(r.costOfMaintenance)}</span>
                         {r.remarks && <span className="ml-3">· {r.remarks}</span>}
                       </div>
                     )}

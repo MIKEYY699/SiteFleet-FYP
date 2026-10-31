@@ -1,10 +1,17 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MapPin, User, Clock, Wrench, AlertTriangle, TrendingUp, HardHat } from 'lucide-react';
+import { ArrowLeft, MapPin, User, Clock, Wrench, AlertTriangle, TrendingUp, HardHat, Pencil, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useMachines } from '@/lib/useMachines';
+import { fetchMachineById, type Machine } from '@/lib/useMachines';
 import { supabase } from '@/lib/supabaseClient';
 import { StatusBadge, MaintStatusBadge } from '@/components/ui/StatusBadge';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { todayInTz } from '@/lib/format';
+import { deleteMachine } from '@/lib/machineActions';
+import ConfirmModal from '@/components/ui/ConfirmModal';
+import { ToastContainer, useToast } from '@/components/ui/Toast';
+import MachineFormModal from './MachineFormModal';
 
 interface Props {
   machineId: string;
@@ -43,9 +50,18 @@ type WorkRecordRow = {
 };
 
 export default function MachineProfileContent({ machineId }: Props) {
-  const { machines, loading: machinesLoading } = useMachines();
-  const machine = machines.find(m => m.id === machineId);
+  const { money, timezone } = useAppSettings();
+  // Loaded by id (not from the current project's list) so links to a machine in
+  // another project still work.
+  const [machine, setMachine] = useState<Machine | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'work'>('overview');
+  const router = useRouter();
+  const [projectCodes, setProjectCodes] = useState<string[]>([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const { toasts, addToast, removeToast } = useToast();
   const [maintRecords, setMaintRecords] = useState<MaintRow[]>([]);
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [workRecords, setWorkRecords] = useState<WorkRecordRow[]>([]);
@@ -53,19 +69,24 @@ export default function MachineProfileContent({ machineId }: Props) {
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: maint }, { data: alertData }] = await Promise.all([
+      setDataLoading(true);
+      const [m, { data: maint }, { data: alertData }] = await Promise.all([
+        fetchMachineById(machineId, todayInTz(timezone)),
         supabase.from('maintenance_records').select('*').eq('machine_id', machineId).order('maintenance_date', { ascending: false }),
         supabase.from('alerts').select('*').eq('machine_id', machineId),
       ]);
+      setMachine(m);
       if (maint) setMaintRecords(maint as MaintRow[]);
       if (alertData) setAlerts(alertData as AlertRow[]);
 
-      if (machine?.machineId) {
+      if (m) {
+        const { data: codes } = await supabase.from('machines').select('machine_code').eq('project_id', m.projectId);
+        setProjectCodes((codes || []).map(c => c.machine_code));
         const { data: work } = await supabase
           .from('work_records')
           .select('id, entry_date, start_time, end_time, total_hours, status, project_site, operator')
-          .eq('machine_code', machine.machineId)
-          .eq('project_id', machine.projectId)
+          .eq('machine_code', m.machineId)
+          .eq('project_id', m.projectId)
           .order('entry_date', { ascending: false });
         if (work) setWorkRecords(work as WorkRecordRow[]);
       }
@@ -73,9 +94,9 @@ export default function MachineProfileContent({ machineId }: Props) {
       setDataLoading(false);
     };
     load();
-  }, [machineId, machine?.machineId, machine?.projectId]);
+  }, [machineId, timezone, reloadKey]);
 
-  if (machinesLoading || dataLoading) {
+  if (dataLoading) {
     return <div className="text-center py-20 text-sm text-muted-foreground">Loading machine profile…</div>;
   }
 
@@ -90,9 +111,30 @@ export default function MachineProfileContent({ machineId }: Props) {
     );
   }
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    const error = await deleteMachine(machine);
+    setDeleting(false);
+    if (error) {
+      setDeleteOpen(false);
+      addToast('error', 'Could not delete machine', error);
+      return;
+    }
+    router.push('/machine-profile');
+  };
+
   const lastMaint = maintRecords[0];
-  const nextDueHours = lastMaint ? lastMaint.hours_at_maintenance + lastMaint.recommended_hours_until_next : null;
-  const remainingHours = nextDueHours ? nextDueHours - machine.totalLifetimeHours : null;
+  // Each part has its own schedule (see syncAlerts): take the latest service of every
+  // part and show whichever is due soonest.
+  const latestPerPart = new Map<string, MaintRow>();
+  maintRecords.forEach(r => {
+    const key = r.part_repaired_or_replaced.trim().toLowerCase();
+    if (!latestPerPart.has(key)) latestPerPart.set(key, r);
+  });
+  const nextDue = [...latestPerPart.values()]
+    .sort((a, b) => (a.hours_at_maintenance + a.recommended_hours_until_next) - (b.hours_at_maintenance + b.recommended_hours_until_next))[0];
+  const nextDueHours = nextDue ? nextDue.hours_at_maintenance + nextDue.recommended_hours_until_next : null;
+  const remainingHours = nextDueHours != null ? nextDueHours - machine.totalLifetimeHours : null;
 
   const getMaintStatusLabel = () => {
     if (machine.maintStatus === 'overdue') return { label: 'Overdue', icon: '🔴' };
@@ -129,6 +171,12 @@ export default function MachineProfileContent({ machineId }: Props) {
             <Link href="/maintenance" className="bg-white/20 hover:bg-white/30 text-white text-xs font-600 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
               <Wrench size={12} /> Log Maintenance
             </Link>
+            <button onClick={() => setEditOpen(true)} className="bg-white/20 hover:bg-white/30 text-white text-xs font-600 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+              <Pencil size={12} /> Edit
+            </button>
+            <button onClick={() => setDeleteOpen(true)} className="bg-white/20 hover:bg-white/30 text-white text-xs font-600 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+              <Trash2 size={12} /> Delete
+            </button>
           </div>
         </div>
       </div>
@@ -172,7 +220,7 @@ export default function MachineProfileContent({ machineId }: Props) {
                 {[
                   { label: 'Last Maintenance Date', value: lastMaint?.maintenance_date ?? 'No record' },
                   { label: 'Last Repaired Part', value: lastMaint?.part_repaired_or_replaced ?? 'No record' },
-                  { label: 'Next Maintenance Due', value: nextDueHours ? `At ${nextDueHours.toLocaleString()}h` : 'Not scheduled' },
+                  { label: 'Next Maintenance Due', value: nextDue && nextDueHours != null ? `${nextDue.part_repaired_or_replaced} at ${nextDueHours.toLocaleString()}h` : 'Not scheduled' },
                   { label: 'Remaining Hours', value: remainingHours != null ? (remainingHours <= 0 ? `${Math.abs(remainingHours)}h overdue` : `${remainingHours}h`) : 'N/A' },
                 ].map(item => (
                   <div key={item.label} className="flex items-center justify-between py-2 border-b border-border last:border-0">
@@ -186,16 +234,16 @@ export default function MachineProfileContent({ machineId }: Props) {
                 </div>
               </div>
 
-              {lastMaint && (
+              {nextDue && (
                 <div className="mt-4 pt-4 border-t border-border">
                   <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
-                    <span>Hours used since last maintenance</span>
-                    <span className="font-600">{(machine.totalLifetimeHours - lastMaint.hours_at_maintenance).toLocaleString()}h / {lastMaint.recommended_hours_until_next}h</span>
+                    <span>Hours used since last {nextDue.part_repaired_or_replaced} service</span>
+                    <span className="font-600">{(machine.totalLifetimeHours - nextDue.hours_at_maintenance).toLocaleString()}h / {nextDue.recommended_hours_until_next}h</span>
                   </div>
                   <div className="h-2.5 bg-border rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${machine.maintStatus === 'overdue' ? 'bg-danger' : machine.maintStatus === 'due-soon' ? 'bg-warning' : 'bg-success'}`}
-                      style={{ width: `${Math.min(((machine.totalLifetimeHours - lastMaint.hours_at_maintenance) / lastMaint.recommended_hours_until_next) * 100, 100)}%` }}
+                      style={{ width: `${Math.min(((machine.totalLifetimeHours - nextDue.hours_at_maintenance) / nextDue.recommended_hours_until_next) * 100, 100)}%` }}
                     />
                   </div>
                 </div>
@@ -264,7 +312,7 @@ export default function MachineProfileContent({ machineId }: Props) {
                       <td className="px-4 py-3.5 text-right font-tabular font-600 text-foreground">{r.recommended_hours_until_next}h</td>
                       <td className="px-4 py-3.5 text-right font-tabular text-foreground">{r.hours_at_maintenance}h</td>
                       <td className="px-4 py-3.5"><span className={`text-2xs font-600 px-2 py-0.5 rounded-full ${STATUS_COLORS[r.status]}`}>{r.status}</span></td>
-                      <td className="px-5 py-3.5 text-right font-tabular text-foreground">{r.cost_of_maintenance ? `PKR ${r.cost_of_maintenance.toLocaleString()}` : '—'}</td>
+                      <td className="px-5 py-3.5 text-right font-tabular text-foreground">{r.cost_of_maintenance ? money(r.cost_of_maintenance) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -317,6 +365,24 @@ export default function MachineProfileContent({ machineId }: Props) {
           )}
         </div>
       )}
+
+      {editOpen && <MachineFormModal
+        machine={machine}
+        projectId={machine.projectId}
+        existingCodes={projectCodes}
+        onClose={() => setEditOpen(false)}
+        onSaved={(msg) => { setEditOpen(false); setReloadKey(k => k + 1); addToast('success', 'Machine saved', msg); }}
+      />}
+      <ConfirmModal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleDelete}
+        title={`Delete ${machine.name}`}
+        message="The machine and its alerts will be removed. Its work and maintenance records are kept as history. Saving a new work record with this machine ID will add it back."
+        confirmLabel="Delete Machine"
+        loading={deleting}
+      />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

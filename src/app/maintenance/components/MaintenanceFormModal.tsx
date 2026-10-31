@@ -1,8 +1,11 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
-import { MaintenanceRecord, MaintenanceType } from '@/lib/machineData';
+import { MaintenanceRecord, MaintenanceType } from '@/lib/maintenanceTypes';
 import { useMachines } from '@/lib/useMachines';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { currencySymbol, todayInTz } from '@/lib/format';
+import { newId } from '@/lib/ids';
 
 interface Props {
   open: boolean;
@@ -16,7 +19,7 @@ const EMPTY: Omit<MaintenanceRecord, 'id'> = {
   machineName: '',
   operatorName: '',
   workshopName: '',
-  maintenanceDate: new Date().toISOString().split('T')[0],
+  maintenanceDate: '', // filled with today's date (company timezone) when the form opens
   maintenanceType: 'Routine',
   partRepairedOrReplaced: '',
   descriptionOfWork: '',
@@ -30,6 +33,7 @@ const EMPTY: Omit<MaintenanceRecord, 'id'> = {
 
 export default function MaintenanceFormModal({ open, record, onClose, onSave }: Props) {
   const { machines } = useMachines();
+  const { currency, timezone } = useAppSettings();
   const [form, setForm] = useState<Omit<MaintenanceRecord, 'id'>>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -38,10 +42,10 @@ export default function MaintenanceFormModal({ open, record, onClose, onSave }: 
       const { id, ...rest } = record;
       setForm(rest);
     } else {
-      setForm(EMPTY);
+      setForm({ ...EMPTY, maintenanceDate: todayInTz(timezone) });
     }
     setErrors({});
-  }, [record, open]);
+  }, [record, open, timezone]);
 
   const set = (key: keyof typeof form, value: unknown) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -76,7 +80,7 @@ export default function MaintenanceFormModal({ open, record, onClose, onSave }: 
     e.preventDefault();
     if (!validate()) return;
     onSave({
-      id: record?.id ?? `maint-${Date.now()}`,
+      id: record?.id ?? newId('maint'),
       ...form,
     });
   };
@@ -194,7 +198,7 @@ export default function MaintenanceFormModal({ open, record, onClose, onSave }: 
               value={form.costOfMaintenance ?? ''}
               onChange={e => set('costOfMaintenance', e.target.value ? Number(e.target.value) : undefined)}
               className={inputCls('costOfMaintenance')}
-              placeholder="Rs. Amount"
+              placeholder={`${currencySymbol(currency)} Amount`}
             />
             {errors.costOfMaintenance && <p className="text-2xs text-danger mt-1">{errors.costOfMaintenance}</p>}
           </div>

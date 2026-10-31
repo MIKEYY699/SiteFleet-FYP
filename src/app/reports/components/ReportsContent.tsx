@@ -5,6 +5,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useMachines } from '@/lib/useMachines';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { formatDateTimeInTz, lastNDays, lastNMonths, todayInTz } from '@/lib/format';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 type MaintRow = {
@@ -22,36 +24,14 @@ type WorkHoursRow = {
   total_hours: number | null;
 };
 
-function getLastNDays(n: number): { date: string; label: string }[] {
-  const days = [];
-  const today = new Date();
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    days.push({ date, label: d.toLocaleDateString('en-US', { weekday: 'short' }) });
-  }
-  return days;
-}
-
-function getLastNMonths(n: number): { key: string; label: string }[] {
-  const today = new Date();
-  const months = [];
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    months.push({ key, label: d.toLocaleDateString('en-US', { month: 'short' }) });
-  }
-  return months;
-}
-
 export default function ReportsContent() {
   const { machines } = useMachines();
   const { currentProjectId, ready } = useCurrentProject();
+  const { currency, timezone, money, moneyShort } = useAppSettings();
 
   const handleExport = () => {
     const rows = [
-      ['Machine', 'Machine Code', 'Part', 'Type', 'Date', 'Cost'],
+      ['Machine', 'Machine Code', 'Part', 'Type', 'Date', `Cost (${currency})`],
       ...maintRecords.map(r => [r.machine_name, r.machine_code, r.part_repaired_or_replaced, r.maintenance_type, r.maintenance_date, r.cost_of_maintenance ?? '']),
     ];
     const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -59,7 +39,7 @@ export default function ReportsContent() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `maintenance-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `maintenance-report-${todayInTz(timezone)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -68,16 +48,16 @@ export default function ReportsContent() {
     doc.setFontSize(16);
     doc.text('SKBEquip — Maintenance Cost Report', 14, 18);
     doc.setFontSize(10);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 25);
+    doc.text(`Generated: ${formatDateTimeInTz(new Date(), timezone)} (${timezone})`, 14, 25);
     autoTable(doc, {
       startY: 32,
       head: [['Machine', 'Code', 'Part', 'Type', 'Date', 'Cost']],
       body: maintRecords.map(r => [
         r.machine_name, r.machine_code, r.part_repaired_or_replaced, r.maintenance_type, r.maintenance_date,
-        r.cost_of_maintenance ? `Rs. ${r.cost_of_maintenance.toLocaleString()}` : '-',
+        r.cost_of_maintenance ? money(r.cost_of_maintenance) : '-',
       ]),
     });
-    doc.save(`maintenance-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`maintenance-report-${todayInTz(timezone)}.pdf`);
   };
  const [maintRecords, setMaintRecords] = useState<MaintRow[]>([]);
   const [workHours, setWorkHours] = useState<WorkHoursRow[]>([]);
@@ -101,13 +81,14 @@ export default function ReportsContent() {
     load();
   }, [currentProjectId, ready]);
 
-  const WEEKLY_DATA = getLastNDays(7).map(d => ({
-    day: d.label,
+  // Both series use `label` so the chart can switch between them with one dataKey.
+  const WEEKLY_DATA = lastNDays(7, timezone).map(d => ({
+    label: d.label,
     hours: Math.round(workHours.filter(r => r.entry_date === d.date).reduce((s, r) => s + (r.total_hours || 0), 0) * 100) / 100,
   }));
 
-  const MONTHLY_DATA = getLastNMonths(6).map(m => ({
-    month: m.label,
+  const MONTHLY_DATA = lastNMonths(6, timezone).map(m => ({
+    label: m.label,
     hours: Math.round(workHours.filter(r => r.entry_date.startsWith(m.key)).reduce((s, r) => s + (r.total_hours || 0), 0) * 100) / 100,
   }));
 
@@ -151,7 +132,7 @@ export default function ReportsContent() {
           { label: 'Hours Today', value: `${totalHoursToday.toFixed(1)}h`, icon: Clock, cls: 'kpi-card-hours' },
           { label: 'Total Fleet Hours', value: `${totalLifetime.toLocaleString()}h`, icon: TrendingUp, cls: 'kpi-card-completed' },
           { label: 'Maintenance Records', value: maintRecords.length, icon: Wrench, cls: 'kpi-card-working' },
-          { label: 'Total Maint. Cost', value: `Rs. ${(totalMaintCost / 1000).toFixed(0)}K`, icon: BarChart3, cls: 'kpi-card-due-soon' },
+          { label: 'Total Maint. Cost', value: moneyShort(totalMaintCost), icon: BarChart3, cls: 'kpi-card-due-soon' },
         ].map(s => {
           const Icon = s.icon;
           return (
@@ -179,7 +160,7 @@ export default function ReportsContent() {
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={period === 'weekly' ? WEEKLY_DATA : MONTHLY_DATA} barSize={28}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-            <XAxis dataKey={period === 'weekly' ? 'day' : 'month'} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
             <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px' }} cursor={{ fill: 'rgba(11,95,206,0.05)' }} />
             <Bar dataKey="hours" fill="#0B5FCE" radius={[4, 4, 0, 0]} name="Hours" />
@@ -248,14 +229,14 @@ export default function ReportsContent() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-foreground font-tabular">{r.maintenance_date}</td>
-                 <td className="px-5 py-3 text-right font-tabular font-700 text-foreground">Rs. {r.cost_of_maintenance?.toLocaleString()}</td>
+                 <td className="px-5 py-3 text-right font-tabular font-700 text-foreground">{money(r.cost_of_maintenance ?? 0)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="bg-muted/40 border-t border-border">
                 <td colSpan={4} className="px-5 py-3 text-sm font-700 text-foreground">Total</td>
-                <td className="px-5 py-3 text-right font-tabular font-800 text-foreground">Rs. {totalMaintCost.toLocaleString()}</td>
+                <td className="px-5 py-3 text-right font-tabular font-800 text-foreground">{money(totalMaintCost)}</td>
               </tr>
             </tfoot>
           </table>

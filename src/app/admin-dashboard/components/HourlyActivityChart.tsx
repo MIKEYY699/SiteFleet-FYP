@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { ChartSkeleton } from '@/components/ui/LoadingSkeleton';
 import { Inbox } from 'lucide-react';
 import { useCurrentProject } from '@/lib/ProjectContext';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { todayInTz } from '@/lib/format';
 
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload?.length) return null;
@@ -21,6 +23,7 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 
 export default function HourlyActivityChart() {
   const { currentProjectId, ready } = useCurrentProject();
+  const { timezone } = useAppSettings();
   const [data, setData] = useState<{ machine: string; hours: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,8 +36,7 @@ export default function HourlyActivityChart() {
     }
     const load = async () => {
       setLoading(true);
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const todayStr = todayInTz(timezone);
       const { data: records } = await supabase
         .from('work_records')
         .select('machine_name, machine_code, total_hours')
@@ -51,7 +53,7 @@ export default function HourlyActivityChart() {
       setLoading(false);
     };
     load();
-  }, [currentProjectId, ready]);
+  }, [currentProjectId, ready, timezone]);
 
   if (loading) {
     return <ChartSkeleton height={200} />;

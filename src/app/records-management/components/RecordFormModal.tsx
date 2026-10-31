@@ -4,12 +4,16 @@ import { useForm } from 'react-hook-form';
 import Modal from '@/components/ui/Modal';
 import { Loader2 } from 'lucide-react';
 import type { WorkRecord } from './RecordsContent';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { nowHMInTz, todayInTz } from '@/lib/format';
+import { newId } from '@/lib/ids';
+import { useMachines } from '@/lib/useMachines';
 
 interface RecordFormModalProps {
   open: boolean;
   record: WorkRecord | null;
   onClose: () => void;
-  onSave: (data: WorkRecord) => void;
+  onSave: (data: WorkRecord) => void | Promise<void>;
 }
 
 type FormData = Omit<WorkRecord, 'id' | 'totalHours'>;
@@ -33,8 +37,12 @@ function calcHours(start: string, end: string): number | null {
 
 export default function RecordFormModal({ open, record, onClose, onSave }: RecordFormModalProps) {
   const isEdit = !!record;
+  const { timezone } = useAppSettings();
+  const todayStr = todayInTz(timezone);
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { machines } = useMachines();
+
+  const { register, handleSubmit, reset, watch, setValue, getValues, formState: { errors, isSubmitting } } = useForm<FormData>({
     defaultValues: {
       machineName: '', machineId: '', machineType: '', entryDate: '',
       projectSite: '', operator: '', jobDescription: '',
@@ -71,6 +79,21 @@ const startTime = watch('startTime');
   const entryDate = watch('entryDate');
   const previewHours = calcHours(startTime, endTime);
 
+  // Machines are matched by ID, so a typo would silently create a second machine.
+  // Suggest existing IDs and fill in the machine's details when one is picked.
+  const machineIdValue = watch('machineId');
+  const findMachine = (code: string) => machines.find(m => m.machineId.toLowerCase() === code.trim().toLowerCase());
+  const matchedMachine = machineIdValue ? findMachine(machineIdValue) : undefined;
+  const handleMachineIdChange = (code: string) => {
+    const m = findMachine(code);
+    if (!m) return;
+    if (code !== m.machineId) setValue('machineId', m.machineId);
+    setValue('machineName', m.name, { shouldValidate: true });
+    if (m.type) setValue('machineType', m.type);
+    if (!getValues('operator') && m.operator) setValue('operator', m.operator);
+    if (!getValues('projectSite') && m.site) setValue('projectSite', m.site);
+  };
+
   useEffect(() => {
     if (status === 'working' && endTime) {
       setValue('endTime', '');
@@ -80,20 +103,15 @@ const startTime = watch('startTime');
 
   function isFutureEndTime(end: string, date: string): boolean {
     if (!end || !date) return false;
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (date !== todayStr) return false; // only restrict "today" entries
-    const nowHM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    return end > nowHM;
+    if (date !== todayInTz(timezone)) return false; // only restrict "today" entries
+    return end > nowHMInTz(timezone);
   }
 
-  // Backend integration point: replace with API call to create/update work record
   const onSubmit = async (data: FormData) => {
-    await new Promise(r => setTimeout(r, 600));
     const totalHours = calcHours(data.startTime, data.endTime);
-    onSave({
+    await onSave({
       ...data,
-      id: record?.id ?? `rec-${Date.now()}`,
+      id: record?.id ?? newId('rec'),
       totalHours,
     });
   };
@@ -139,13 +157,26 @@ const startTime = watch('startTime');
               {/* Machine ID */}
               <div>
                 <label className={labelCls}>Machine ID</label>
-                <p className={hintCls}>Optional — used for tracking</p>
+                <p className={hintCls}>Pick an existing machine or enter a new ID</p>
                 <input
                   type="text"
+                  list="machine-id-options"
                   placeholder="e.g. EX-015"
                   className={inputCls(false)}
-                  {...register('machineId')}
+                  {...register('machineId', { onChange: e => handleMachineIdChange(e.target.value) })}
                 />
+                <datalist id="machine-id-options">
+                  {machines.map(m => (
+                    <option key={`mid-${m.id}`} value={m.machineId}>{m.name}</option>
+                  ))}
+                </datalist>
+                {machineIdValue?.trim() && (
+                  <p className={hintCls}>
+                    {matchedMachine
+                      ? `Existing machine: ${matchedMachine.name}`
+                      : 'New ID — a new machine will be added to this project'}
+                  </p>
+                )}
               </div>
 
               {/* Machine Type */}
@@ -181,11 +212,11 @@ const startTime = watch('startTime');
                 </label>
                 <input
                   type="date"
-                  max={new Date().toISOString().split('T')[0]}
+                  max={todayStr}
                   className={inputCls(!!errors.entryDate)}
                   {...register('entryDate', {
                     required: 'Entry date is required',
-                    validate: (v) => v <= new Date().toISOString().split('T')[0] || 'Entry date cannot be in the future',
+                    validate: (v) => v <= todayInTz(timezone) || 'Entry date cannot be in the future',
                   })}
                 />
                 {errors.entryDate && <p className={errorCls}>{errors.entryDate.message}</p>}

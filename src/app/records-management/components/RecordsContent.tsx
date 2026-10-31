@@ -11,6 +11,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { syncAlerts } from '@/lib/alertsSync';
 import { useCurrentProject } from '@/lib/ProjectContext';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { formatDateTimeInTz, todayInTz } from '@/lib/format';
+import { newId } from '@/lib/ids';
 
 export type WorkRecord = {
   id: string;
@@ -76,81 +79,49 @@ function toDb(rec: WorkRecord): DbWorkRecord {
   };
 }
 
-function slugifyMachineCode(code: string): string {
-  return `mach-${code.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
-}
-
-function getTodayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// Recomputes hours_today for a machine by summing ALL of today's records for it,
-// instead of trusting whichever record was saved last.
-async function refreshHoursToday(machineCode: string, projectId: string | null) {
-  const todayStr = getTodayStr();
-  const { data } = await supabase
-    .from('work_records')
-    .select('total_hours')
-    .eq('machine_code', machineCode)
-    .eq('project_id', projectId)
-    .eq('entry_date', todayStr);
-  const sum = (data || []).reduce((s, r) => s + (r.total_hours || 0), 0);
-  await supabase.from('machines').update({ hours_today: sum }).eq('machine_code', machineCode).eq('project_id', projectId);
-}
-
-// Adds (or subtracts, if delta is negative) hours to a machine's lifetime total,
-// used for edits, deletes, and machine reassignment. Never lets it go below 0.
-async function adjustMachineLifetimeHours(machineCode: string, projectId: string | null, delta: number) {
-  if (!machineCode || !delta) return;
-  const { data: existing } = await supabase.from('machines').select('*').eq('machine_code', machineCode).eq('project_id', projectId).maybeSingle();
-  if (!existing) return;
-  const newTotal = Math.max(0, (existing.total_lifetime_hours || 0) + delta);
-  await supabase.from('machines').update({ total_lifetime_hours: newTotal }).eq('id', existing.id);
-  await refreshHoursToday(machineCode, projectId);
-}
-
-async function upsertMachineFromRecord(rec: WorkRecord, previousHours: number | null = null, projectId: string | null = null) {
-  if (!rec.machineId) return;
-  const { data: existing } = await supabase
+// Makes sure the record's machine exists and carries the record's latest details.
+// Lifetime hours are NOT touched here: the database adds/removes a record's hours
+// itself whenever a work record is inserted, edited or deleted (trigger
+// work_records_apply_hours, see supabase/migrations). So this must run BEFORE the
+// record is saved, so there is a machine row for those hours to land on.
+async function ensureMachineForRecord(rec: WorkRecord, projectId: string | null): Promise<string | null> {
+  if (!rec.machineId) return null;
+  const { data: existing, error: findError } = await supabase
     .from('machines')
-    .select('*')
+    .select('id, type, status')
     .eq('machine_code', rec.machineId)
     .eq('project_id', projectId)
     .maybeSingle();
-
-  // When editing an existing record, only add the *change* in hours, not the
-  // full total again — otherwise lifetime hours double up every time a record is edited.
-  const hoursDelta = (rec.totalHours ?? 0) - (previousHours ?? 0);
+  if (findError) return findError.message;
 
   if (existing) {
-    await supabase.from('machines').update({
+    const { error } = await supabase.from('machines').update({
       name: rec.machineName,
       type: rec.machineType || existing.type,
       operator: rec.operator,
       site: rec.projectSite,
-      status: rec.status,
+      // A machine marked out of service stays that way until someone clears it.
+      status: existing.status === 'maintenance' ? 'maintenance' : rec.status,
       start_time: rec.startTime,
-      total_lifetime_hours: Math.max(0, (existing.total_lifetime_hours || 0) + hoursDelta),
     }).eq('id', existing.id);
-  } else {
-    const machineDbId = `mach-${(projectId || 'none').slice(0, 8)}-${slugifyMachineCode(rec.machineId).replace(/^mach-/, '')}`;
-    await supabase.from('machines').insert({
-      id: machineDbId,
-      name: rec.machineName,
-      machine_code: rec.machineId,
-      type: rec.machineType || 'Other',
-      operator: rec.operator,
-      site: rec.projectSite,
-      status: rec.status,
-      start_time: rec.startTime,
-      hours_today: 0,
-      total_lifetime_hours: Math.max(0, rec.totalHours ?? 0),
-      maint_status: 'good',
-      project_id: projectId,
-    });
+    return error?.message ?? null;
   }
-  await refreshHoursToday(rec.machineId, projectId);
+
+  const { error } = await supabase.from('machines').insert({
+    id: newId('mach'),
+    name: rec.machineName,
+    machine_code: rec.machineId,
+    type: rec.machineType || 'Other',
+    operator: rec.operator,
+    site: rec.projectSite,
+    status: rec.status,
+    start_time: rec.startTime,
+    hours_today: 0,
+    total_lifetime_hours: 0,
+    maint_status: 'good',
+    project_id: projectId,
+  });
+  return error?.message ?? null;
 }
 
 export type FilterState = {
@@ -163,6 +134,7 @@ export type FilterState = {
 
 export default function RecordsContent() {
   const { currentProjectId, ready } = useCurrentProject();
+  const { timezone } = useAppSettings();
   const [records, setRecords] = useState<WorkRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>({ search: '', status: '', dateFrom: '', dateTo: '', site: '' });
@@ -215,7 +187,7 @@ export default function RecordsContent() {
     doc.setFontSize(16);
     doc.text('SKBEquip — Work Records Report', 14, 18);
     doc.setFontSize(10);
-    doc.text(`Generated: ${new Date().toLocaleString()} — ${filtered.length} records`, 14, 25);
+    doc.text(`Generated: ${formatDateTimeInTz(new Date(), timezone)} (${timezone}) — ${filtered.length} records`, 14, 25);
     autoTable(doc, {
       startY: 32,
       head: [['Machine', 'Code', 'Date', 'Site', 'Operator', 'Start', 'End', 'Hours', 'Status']],
@@ -225,7 +197,7 @@ export default function RecordsContent() {
       ]),
       styles: { fontSize: 8 },
     });
-    doc.save(`work-records-${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`work-records-${todayInTz(timezone)}.pdf`);
   };
   
   const siteOptions = Array.from(new Set(records.map(r => r.projectSite).filter(Boolean))).sort();
@@ -233,31 +205,28 @@ export default function RecordsContent() {
   const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   const handleSave = async (data: WorkRecord) => {
+    // Machine first, so the database has a machine to add this record's hours to.
+    // Hours (including moving them when the machine is switched) are handled by the
+    // database when the record below is saved.
+    const machineError = await ensureMachineForRecord(data, currentProjectId);
+    if (machineError) addToast('error', 'Machine details not saved', machineError);
+
     if (editRecord) {
       const { error } = await supabase.from('work_records').update(toDb(data)).eq('id', data.id);
       if (error) {
         addToast('error', 'Could not update record', error.message);
         return;
       }
-      if (editRecord.machineId !== data.machineId) {
-        // Machine was switched — fully reverse the old machine's contribution,
-        // then fully apply the new machine's contribution, instead of a partial delta.
-        await adjustMachineLifetimeHours(editRecord.machineId, currentProjectId, -(editRecord.totalHours ?? 0));
-        await upsertMachineFromRecord(data, null, currentProjectId);
-      } else {
-        await upsertMachineFromRecord(data, editRecord.totalHours, currentProjectId);
-      }
       await syncAlerts(currentProjectId);
       setRecords(prev => prev.map(r => r.id === data.id ? data : r));
       addToast('success', 'Record updated', `${data.machineName} entry saved successfully`);
     } else {
-      const newRecord = { ...data, id: `rec-${Date.now()}` };
+      const newRecord = { ...data, id: newId('rec') };
       const { error } = await supabase.from('work_records').insert({ ...toDb(newRecord), project_id: currentProjectId });
       if (error) {
         addToast('error', 'Could not create record', error.message);
         return;
       }
-      await upsertMachineFromRecord(newRecord, null, currentProjectId);
       await syncAlerts(currentProjectId);
       setRecords(prev => [newRecord, ...prev]);
       addToast('success', 'Record created', `New entry for ${data.machineName} added`);
@@ -276,10 +245,8 @@ export default function RecordsContent() {
       addToast('error', 'Could not delete record', error.message);
       return;
     }
-    if (rec) {
-      await adjustMachineLifetimeHours(rec.machineId, currentProjectId, -(rec.totalHours ?? 0));
-      await syncAlerts(currentProjectId);
-    }
+    // The database takes this record's hours off the machine.
+    await syncAlerts(currentProjectId);
     setDeleteLoading(false);
     setRecords(prev => prev.filter(r => r.id !== deleteTarget));
     setDeleteTarget(null);
@@ -289,22 +256,13 @@ export default function RecordsContent() {
   const handleBulkDelete = async () => {
     setDeleteLoading(true);
     const count = selectedIds.size;
-    const toDelete = records.filter(r => selectedIds.has(r.id));
     const { error } = await supabase.from('work_records').delete().in('id', Array.from(selectedIds));
     if (error) {
       setDeleteLoading(false);
       addToast('error', 'Could not delete records', error.message);
       return;
     }
-    // Sum hours per machine so each machine only gets one update, not one per record.
-    const hoursByMachine = new Map<string, number>();
-    toDelete.forEach(r => {
-      if (!r.machineId) return;
-      hoursByMachine.set(r.machineId, (hoursByMachine.get(r.machineId) || 0) + (r.totalHours ?? 0));
-    });
-    for (const [machineId, hours] of hoursByMachine) {
-      await adjustMachineLifetimeHours(machineId, currentProjectId, -hours);
-    }
+    // The database takes each deleted record's hours off its machine.
     await syncAlerts(currentProjectId);
     setDeleteLoading(false);
     setRecords(prev => prev.filter(r => !selectedIds.has(r.id)));

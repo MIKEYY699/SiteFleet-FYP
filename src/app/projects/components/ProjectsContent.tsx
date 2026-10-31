@@ -5,6 +5,10 @@ import { Plus, Building2, ArrowRight } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import Modal from '@/components/ui/Modal';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { useRole } from '@/lib/RoleContext';
+import { todayInTz } from '@/lib/format';
+import { machineFromDb, recentWorkRecordsQuery, withLiveStatus, type DbMachine, type RecentWorkRecord } from '@/lib/useMachines';
 
 interface ProjectRow {
   id: string;
@@ -17,6 +21,8 @@ interface ProjectRow {
 export default function ProjectsContent() {
   const router = useRouter();
   const { setCurrentProject } = useCurrentProject();
+  const { timezone } = useAppSettings();
+  const { isOperator } = useRole();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [machineCounts, setMachineCounts] = useState<Record<string, number>>({});
   const [activeCounts, setActiveCounts] = useState<Record<string, number>>({});
@@ -30,17 +36,27 @@ export default function ProjectsContent() {
 
   const loadProjects = async () => {
     setLoading(true);
-    const { data: projectRows } = await supabase.from('projects').select('*').order('created_at', { ascending: true });
-    const { data: machineRows } = await supabase.from('machines').select('project_id, status, maint_status');
+    const todayStr = todayInTz(timezone);
+    const [{ data: projectRows }, { data: machineRows }, { data: recentRecords }] = await Promise.all([
+      supabase.from('projects').select('*').order('created_at', { ascending: true }),
+      supabase.from('machines').select('*'),
+      recentWorkRecordsQuery(todayStr),
+    ]);
+    // Same live status as the dashboard, rather than the machines.status column.
+    const machines = withLiveStatus(
+      ((machineRows || []) as DbMachine[]).map(machineFromDb),
+      (recentRecords || []) as RecentWorkRecord[],
+      todayStr,
+    );
 
     const counts: Record<string, number> = {};
     const active: Record<string, number> = {};
     const overdue: Record<string, number> = {};
-    (machineRows || []).forEach((m: { project_id: string | null; status: string; maint_status: string }) => {
-      if (!m.project_id) return;
-      counts[m.project_id] = (counts[m.project_id] || 0) + 1;
-      if (m.status === 'working') active[m.project_id] = (active[m.project_id] || 0) + 1;
-      if (m.maint_status === 'overdue') overdue[m.project_id] = (overdue[m.project_id] || 0) + 1;
+    machines.forEach(m => {
+      if (!m.projectId) return;
+      counts[m.projectId] = (counts[m.projectId] || 0) + 1;
+      if (m.status === 'working') active[m.projectId] = (active[m.projectId] || 0) + 1;
+      if (m.maintStatus === 'overdue') overdue[m.projectId] = (overdue[m.projectId] || 0) + 1;
     });
 
     setProjects(projectRows || []);
@@ -52,7 +68,8 @@ export default function ProjectsContent() {
 
   useEffect(() => {
     loadProjects();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timezone]);
 
   const enterProject = (project: ProjectRow) => {
     setCurrentProject(project.id, project.name);
@@ -90,14 +107,16 @@ export default function ProjectsContent() {
 
   return (
     <div>
-      <div className="flex justify-end mb-6 flex-wrap gap-3">
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white text-sm font-600 rounded-lg hover:opacity-90 transition-opacity"
-        >
-          <Plus size={16} /> Create New Project
-        </button>
-      </div>
+      {isOperator && (
+        <div className="flex justify-end mb-6 flex-wrap gap-3">
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white text-sm font-600 rounded-lg hover:opacity-90 transition-opacity"
+          >
+            <Plus size={16} /> Create New Project
+          </button>
+        </div>
+      )}
 
       {projects.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-border rounded-xl">

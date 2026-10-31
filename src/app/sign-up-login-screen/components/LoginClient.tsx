@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import AppImage from '@/components/ui/AppImage';
 import { Eye, EyeOff, Loader2, HardHat, AlertCircle, CheckCircle2, ClipboardList, Wrench, BarChart3 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, setRememberMe } from '@/lib/supabaseClient';
 
 interface FormData {
   fullName: string;
@@ -30,7 +30,7 @@ export default function LoginClient() {
   const [signupDone, setSignupDone] = useState(false);
 
   const { register, handleSubmit, getValues, watch, reset, formState: { errors } } = useForm<FormData>({
-    defaultValues: { fullName: '', email: '', password: '', confirmPassword: '', rememberMe: false },
+    defaultValues: { fullName: '', email: '', password: '', confirmPassword: '', rememberMe: true },
   });
 
   const switchMode = (next: 'login' | 'signup') => {
@@ -44,6 +44,7 @@ export default function LoginClient() {
   const onLogin = async (data: FormData) => {
     setIsLoading(true);
     setFormError('');
+    setRememberMe(data.rememberMe);
     const { error } = await supabase.auth.signInWithPassword({ email: data.email, password: data.password });
     if (error) {
       setFormError(error.message);
@@ -56,6 +57,7 @@ export default function LoginClient() {
   const onSignup = async (data: FormData) => {
     setIsLoading(true);
     setFormError('');
+    setRememberMe(true);
     const { data: signupData, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
@@ -82,7 +84,14 @@ export default function LoginClient() {
       setFormError('Enter your email above first, then click "Forgot password?"');
       return;
     }
-    await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) {
+      setFormError(error.message);
+      return;
+    }
+    setFormError('');
     setResetSent(true);
   };
 

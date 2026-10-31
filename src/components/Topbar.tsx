@@ -5,16 +5,18 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useNavCounts } from '@/lib/useNavCounts';
-import { useCurrentProject } from '@/lib/ProjectContext';
-import { geocodeLocation, fetchWeather, weatherIcon } from '@/lib/weather';
 import TemperatureWidget from '@/app/admin-dashboard/components/TemperatureWidget';
 import type { UserRole } from '@/lib/useUserRole';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { formatLongDateInTz, formatTimeInTz } from '@/lib/format';
 
 interface TopbarProps {
   onMobileMenuToggle: () => void;
   sidebarCollapsed: boolean;
   role: UserRole | null;
   currentPath?: string;
+  lastUpdated: Date;
+  onRefresh: () => void;
 }
 
 const PAGE_META: { match: string; title: string; subtitle: string }[] = [
@@ -33,45 +35,12 @@ function metaFor(path: string) {
   return PAGE_META.find(p => path.startsWith(p.match)) || { title: 'SKBEquip', subtitle: '' };
 }
 
-export default function Topbar({ onMobileMenuToggle, role, currentPath }: TopbarProps) {
+export default function Topbar({ onMobileMenuToggle, role, currentPath, lastUpdated, onRefresh }: TopbarProps) {
   const router = useRouter();
   const { alertsCount } = useNavCounts();
-const { currentProjectId } = useCurrentProject();
-const [weatherText, setWeatherText] = useState<string>('');
-  const [lastUpdated, setLastUpdated] = useState('');
+  const { timezone } = useAppSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const setNow = () => setLastUpdated(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
-    setNow();
-    const interval = setInterval(setNow, 30000);
-    return () => clearInterval(interval);
-  }, []);
-    useEffect(() => {
-    if (!currentProjectId) return;
-    let cancelled = false;
-
-    (async () => {
-      const { data: project } = await supabase
-        .from('projects')
-        .select('location')
-        .eq('id', currentProjectId)
-        .single();
-
-      if (!project?.location) return;
-      const geo = await geocodeLocation(project.location);
-      if (!geo || cancelled) return;
-
-      const snapshot = await fetchWeather(geo.latitude, geo.longitude);
-      if (!snapshot || cancelled) return;
-
-      const icon = weatherIcon(snapshot.weatherCode, snapshot.isDay);
-      setWeatherText(`${icon} ${Math.round(snapshot.temperatureC)}°C`);
-    })();
-
-    return () => { cancelled = true; };
-  }, [currentProjectId]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -88,7 +57,7 @@ const [weatherText, setWeatherText] = useState<string>('');
 
   const meta = metaFor(currentPath || '');
   const isDashboard = (currentPath || '').startsWith('/admin-dashboard');
-  const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const todayStr = formatLongDateInTz(new Date(), timezone);
 
   return (
     <header className="min-h-[64px] py-2 bg-card border-b border-border flex items-center px-4 lg:px-6 gap-4 flex-shrink-0 z-20">
@@ -99,9 +68,6 @@ const [weatherText, setWeatherText] = useState<string>('');
         {isDashboard ? (
           <p className="text-2xs text-muted-foreground truncate leading-tight mt-0.5 flex items-center gap-1.5">
             <span className="hidden sm:inline">{todayStr} — </span>{meta.subtitle}
-            <span className="flex items-center gap-1 text-success font-600 flex-shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> Live data
-            </span>
           </p>
         ) : (
           meta.subtitle && <p className="text-2xs text-muted-foreground truncate leading-tight mt-0.5 hidden sm:block">{meta.subtitle}</p>
@@ -111,8 +77,13 @@ const [weatherText, setWeatherText] = useState<string>('');
       <div className="flex-1" />
 
       <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-  <RefreshCw size={12} /><span>Updated {lastUpdated}</span>
-  {weatherText && <span className="ml-2">{weatherText}</span>}
+  <button
+    onClick={onRefresh}
+    title="Reload this page's data"
+    className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted hover:text-foreground transition-colors"
+  >
+    <RefreshCw size={12} /><span>Updated {formatTimeInTz(lastUpdated, timezone)}</span>
+  </button>
 </div>
 
       <TemperatureWidget />

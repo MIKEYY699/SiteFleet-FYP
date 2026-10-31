@@ -6,6 +6,8 @@ import Topbar from './Topbar';
 import { supabase } from '@/lib/supabaseClient';
 import { useUserRole } from '@/lib/useUserRole';
 import { ProjectProvider } from '@/lib/ProjectContext';
+import { AppSettingsProvider } from '@/lib/AppSettingsContext';
+import { RoleProvider } from '@/lib/RoleContext';
 import RouteLoadingBar from './RouteLoadingBar';
 import type { Session } from '@supabase/supabase-js';
 
@@ -22,6 +24,10 @@ export default function AppLayout({ children, currentPath }: AppLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  // Bumping refreshKey remounts the page so every widget refetches; lastLoadedAt
+  // records when that happened so the topbar's "Updated" time is truthful.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastLoadedAt, setLastLoadedAt] = useState(() => new Date());
   const { role, loading: roleLoading } = useUserRole(session?.user?.id);
 
   useEffect(() => {
@@ -56,8 +62,10 @@ export default function AppLayout({ children, currentPath }: AppLayoutProps) {
   }
 
   return (
+    <RoleProvider role={role}>
+    <AppSettingsProvider>
     <ProjectProvider>
-      <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+      <div key={refreshKey} className="flex h-screen overflow-hidden bg-[#F8FAFC]">
         <RouteLoadingBar />
         {mobileSidebarOpen && (
           <div className="fixed inset-0 z-40 modal-overlay lg:hidden" onClick={() => setMobileSidebarOpen(false)} />
@@ -78,6 +86,8 @@ export default function AppLayout({ children, currentPath }: AppLayoutProps) {
             sidebarCollapsed={sidebarCollapsed}
             role={role}
             currentPath={resolvedPath}
+            lastUpdated={lastLoadedAt}
+            onRefresh={() => { setRefreshKey(k => k + 1); setLastLoadedAt(new Date()); }}
           />
           <main className="flex-1 overflow-y-auto scrollbar-thin">
             <div className="px-4 py-6 lg:px-6 xl:px-8 2xl:px-10 max-w-screen-2xl mx-auto">
@@ -87,5 +97,7 @@ export default function AppLayout({ children, currentPath }: AppLayoutProps) {
         </div>
       </div>
     </ProjectProvider>
+    </AppSettingsProvider>
+    </RoleProvider>
   );
 }

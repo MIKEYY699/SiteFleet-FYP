@@ -7,19 +7,8 @@ import {
 import { supabase } from '@/lib/supabaseClient';
 import { ChartSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useCurrentProject } from '@/lib/ProjectContext';
-
-function getLast7Days() {
-  const days = [];
-  const today = new Date();
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const label = d.toLocaleDateString('en-US', { weekday: 'short' });
-    days.push({ date: dateStr, label });
-  }
-  return days;
-}
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { lastNDays } from '@/lib/format';
 
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload?.length) return null;
@@ -33,6 +22,7 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 
 export default function WeeklyHoursChart() {
   const { currentProjectId, ready } = useCurrentProject();
+  const { timezone } = useAppSettings();
   const [data, setData] = useState<{ day: string; hours: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,7 +35,7 @@ export default function WeeklyHoursChart() {
     }
     const load = async () => {
       setLoading(true);
-      const days = getLast7Days();
+      const days = lastNDays(7, timezone);
       const { data: records } = await supabase
         .from('work_records')
         .select('entry_date, total_hours')
@@ -61,7 +51,7 @@ export default function WeeklyHoursChart() {
       setLoading(false);
     };
     load();
-  }, [currentProjectId, ready]);
+  }, [currentProjectId, ready, timezone]);
 
   if (loading) {
     return <ChartSkeleton height={200} />;

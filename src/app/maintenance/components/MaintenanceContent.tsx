@@ -1,11 +1,12 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Plus, Wrench, Clock, CheckCircle2, AlertTriangle, Search } from 'lucide-react';
-import { MaintenanceRecord, MaintenanceType, MaintenanceRecordStatus } from '@/lib/machineData';
+import { MaintenanceRecord, MaintenanceType, MaintenanceRecordStatus } from '@/lib/maintenanceTypes';
 import { useMachines } from '@/lib/useMachines';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { syncAlerts } from '@/lib/alertsSync';
+import { newId } from '@/lib/ids';
 
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import MaintenanceFormModal from './MaintenanceFormModal';
@@ -84,6 +85,23 @@ export default function MaintenanceContent() {
   const [historyMachineId, setHistoryMachineId] = useState<string | null>(null);
   const { toasts, addToast, removeToast } = useToast();
 
+  // Record status (Active / Due / Overdue) is computed by syncAlerts from machine
+  // hours, so always sync first and then read the records back from the database.
+  const syncAndLoad = async () => {
+    if (!currentProjectId) return;
+    await syncAlerts(currentProjectId);
+    const { data, error } = await supabase
+      .from('maintenance_records')
+      .select('*')
+      .eq('project_id', currentProjectId)
+      .order('maintenance_date', { ascending: false });
+    if (error) {
+      addToast('error', 'Could not load maintenance records', error.message);
+    } else if (data) {
+      setRecords(data.map(fromDb));
+    }
+  };
+
   useEffect(() => {
     if (!ready) return;
     if (!currentProjectId) {
@@ -93,16 +111,7 @@ export default function MaintenanceContent() {
     }
     const load = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('maintenance_records')
-        .select('*')
-        .eq('project_id', currentProjectId)
-        .order('maintenance_date', { ascending: false });
-      if (error) {
-        addToast('error', 'Could not load maintenance records', error.message);
-      } else if (data) {
-        setRecords(data.map(fromDb));
-      }
+      await syncAndLoad();
       setLoading(false);
     };
     load();
@@ -134,18 +143,16 @@ export default function MaintenanceContent() {
         addToast('error', 'Could not update record', error.message);
         return;
       }
-      await syncAlerts(currentProjectId);
-      setRecords(prev => prev.map(r => r.id === data.id ? data : r));
+      await syncAndLoad();
       addToast('success', 'Record updated', `Maintenance record for ${data.machineName} saved`);
     } else {
-      const newRecord = { ...data, id: `maint-${Date.now()}` };
+      const newRecord = { ...data, id: newId('maint') };
       const { error } = await supabase.from('maintenance_records').insert({ ...toDb(newRecord, machineDbId), project_id: currentProjectId });
       if (error) {
         addToast('error', 'Could not create record', error.message);
         return;
       }
-      await syncAlerts(currentProjectId);
-      setRecords(prev => [newRecord, ...prev]);
+      await syncAndLoad();
       addToast('success', 'Record created', `New maintenance record for ${data.machineName} added`);
     }
     setFormOpen(false);

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Building2, HardHat, Timer, AlertTriangle, BarChart3, ArrowRight } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { todayInTz } from '@/lib/format';
 
 interface ProjectRow {
   id: string;
@@ -18,11 +20,6 @@ interface ProjectStats {
   hoursToday: number;
   alerts: number;
   maintCost: number;
-}
-
-function getTodayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function OverviewKpi({ icon: Icon, label, value, tint }: { icon: React.ElementType; label: string; value: string; tint: string }) {
@@ -40,6 +37,7 @@ function OverviewKpi({ icon: Icon, label, value, tint }: { icon: React.ElementTy
 export default function OverviewContent() {
   const router = useRouter();
   const { setCurrentProject } = useCurrentProject();
+  const { timezone, money } = useAppSettings();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [stats, setStats] = useState<Record<string, ProjectStats>>({});
   const [loading, setLoading] = useState(true);
@@ -47,7 +45,7 @@ export default function OverviewContent() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const todayStr = getTodayStr();
+      const todayStr = todayInTz(timezone);
 
       const [{ data: projectRows }, { data: machineRows }, { data: workRows }, { data: maintRows }, { data: alertRows }] = await Promise.all([
         supabase.from('projects').select('*').order('created_at', { ascending: true }),
@@ -78,7 +76,7 @@ export default function OverviewContent() {
       setLoading(false);
     };
     load();
-  }, []);
+  }, [timezone]);
 
   const totals = Object.values(stats).reduce(
     (acc, s) => ({
@@ -102,7 +100,7 @@ export default function OverviewContent() {
   return (
     <div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <OverviewKpi icon={Building2} label="Active Projects" value={String(projects.length)} tint="bg-primary/10 text-primary" />
+        <OverviewKpi icon={Building2} label={`Active Projects (${projects.length} total)`} value={String(projects.filter(p => p.status === 'active').length)} tint="bg-primary/10 text-primary" />
         <OverviewKpi icon={HardHat} label="Total Machines" value={String(totals.machines)} tint="bg-earth/10 text-earth" />
         <OverviewKpi icon={Timer} label="Hours Logged Today" value={totals.hoursToday.toFixed(1)} tint="bg-success/10 text-success" />
         <OverviewKpi icon={AlertTriangle} label="Active Alerts" value={String(totals.alerts)} tint="bg-danger/10 text-danger" />
@@ -112,7 +110,7 @@ export default function OverviewContent() {
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="text-sm font-700 text-foreground">By Project</h2>
           <span className="flex items-center gap-1.5 text-xs font-600 text-muted-foreground">
-            <BarChart3 size={13} /> All-time maintenance cost: Rs {totals.maintCost.toLocaleString()}
+            <BarChart3 size={13} /> All-time maintenance cost: {money(totals.maintCost)}
           </span>
         </div>
 
@@ -158,7 +156,7 @@ export default function OverviewContent() {
                       <td className="px-3 py-3 text-right font-tabular">
                         {s.alerts > 0 ? <span className="text-danger font-700">{s.alerts}</span> : <span className="text-muted-foreground">0</span>}
                       </td>
-                      <td className="px-3 py-3 text-right font-tabular text-foreground">Rs {s.maintCost.toLocaleString()}</td>
+                      <td className="px-3 py-3 text-right font-tabular text-foreground">{money(s.maintCost)}</td>
                       <td className="px-5 py-3 text-right">
                         <button
                           onClick={() => enterProject(project)}

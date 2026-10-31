@@ -8,7 +8,8 @@ import ActiveMachinesTable from './ActiveMachinesTable';
 import MaintenanceAlertsPanel from './MaintenanceAlertsPanel';
 import RecentActivity from './RecentActivity';
 import DrillDownModal from './DrillDownModal';
-import { BarChart3, Activity } from 'lucide-react';
+import { BarChart3, Activity, AlertCircle } from 'lucide-react';
+import { useMachines } from '@/lib/useMachines';
 
 const HourlyActivityChart = dynamic(() => import('./HourlyActivityChart'), { ssr: false });
 
@@ -38,9 +39,16 @@ function ChartCard({ icon: Icon, title, subtitle, badge, children }: { icon: Rea
 
 export default function DashboardContent() {
   const [drillFilter, setDrillFilter] = useState<string | null>(null);
+  const { error: machinesError } = useMachines();
 
   return (
     <div className="space-y-7">
+      {machinesError && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-danger/10 border border-danger/20 text-sm text-danger">
+          <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+          <span>Could not load machine data, so the numbers below may be incomplete. Use Refresh in the top bar to try again. ({machinesError})</span>
+        </div>
+      )}
       <div className="space-y-3">
         <SectionLabel text="Fleet Overview" />
         <KpiBentoGrid onCardClick={(f) => setDrillFilter(f)} />

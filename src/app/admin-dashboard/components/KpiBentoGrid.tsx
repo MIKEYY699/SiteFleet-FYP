@@ -4,18 +4,14 @@ import { TrendingUp, TrendingDown, HardHat, Timer, CheckCircle2, Clock, Wrench, 
 import { useMachines } from '@/lib/useMachines';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { addDays, todayInTz } from '@/lib/format';
 
 interface KpiBentoGridProps {
   onCardClick?: (filter: string) => void;
 }
 
 type DbWorkRecord = { id: string; entry_date: string; total_hours: number | null; status: string };
-
-function getDateStr(offsetDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function TrendBadge({ current, previous }: { current: number; previous: number }) {
   if (previous === 0 && current === 0) return null;
@@ -32,9 +28,9 @@ function TrendBadge({ current, previous }: { current: number; previous: number }
 export default function KpiBentoGrid({ onCardClick }: KpiBentoGridProps) {
   const { machines, loading } = useMachines();
   const { currentProjectId, ready } = useCurrentProject();
+  const { timezone, moneyShort } = useAppSettings();
   const [todayRecords, setTodayRecords] = useState<DbWorkRecord[]>([]);
   const [yesterdayRecords, setYesterdayRecords] = useState<DbWorkRecord[]>([]);
-  const [totalCompleted, setTotalCompleted] = useState<number>(0);
   const [totalMaintCost, setTotalMaintCost] = useState<number | null>(null);
   const [recordsLoading, setRecordsLoading] = useState(true);
 
@@ -43,35 +39,34 @@ export default function KpiBentoGrid({ onCardClick }: KpiBentoGridProps) {
     if (!currentProjectId) {
       setTodayRecords([]);
       setYesterdayRecords([]);
-      setTotalCompleted(0);
       setTotalMaintCost(0);
       setRecordsLoading(false);
       return;
     }
     const load = async () => {
       setRecordsLoading(true);
-      const todayStr = getDateStr(0);
-      const yestStr = getDateStr(-1);
-      const [{ data: today }, { data: yest }, { count: completedCount }, { data: maint }] = await Promise.all([
+      const todayStr = todayInTz(timezone);
+      const yestStr = addDays(todayStr, -1);
+      const [{ data: today }, { data: yest }, { data: maint }] = await Promise.all([
         supabase.from('work_records').select('id, entry_date, total_hours, status').eq('project_id', currentProjectId).eq('entry_date', todayStr),
         supabase.from('work_records').select('id, entry_date, total_hours, status').eq('project_id', currentProjectId).eq('entry_date', yestStr),
-        supabase.from('work_records').select('id', { count: 'exact', head: true }).eq('project_id', currentProjectId).eq('status', 'completed'),
         supabase.from('maintenance_records').select('cost_of_maintenance').eq('project_id', currentProjectId),
       ]);
       if (today) setTodayRecords(today as DbWorkRecord[]);
       if (yest) setYesterdayRecords(yest as DbWorkRecord[]);
-      setTotalCompleted(completedCount || 0);
       if (maint) setTotalMaintCost(maint.reduce((s, r) => s + (r.cost_of_maintenance || 0), 0));
       setRecordsLoading(false);
     };
     load();
-  }, [currentProjectId, ready]);
+  }, [currentProjectId, ready, timezone]);
 
   const working = machines.filter(m => m.status === 'working');
   const idle = machines.filter(m => m.status === 'idle');
   const dueSoon = machines.filter(m => m.maintStatus === 'due-soon');
   const overdue = machines.filter(m => m.maintStatus === 'overdue');
 
+  // Matches the drill-down ("Jobs Completed Today"), not an all-time count.
+  const totalCompleted = todayRecords.filter(r => r.status === 'completed').length;
   const totalHoursToday = todayRecords.reduce((s, r) => s + (r.total_hours || 0), 0);
   const totalHoursYesterday = yesterdayRecords.reduce((s, r) => s + (r.total_hours || 0), 0);
 
@@ -80,11 +75,11 @@ export default function KpiBentoGrid({ onCardClick }: KpiBentoGridProps) {
 const STATS = [
     { id: 'working', label: 'Working', dotCls: 'bg-success', icon: HardHat, glowCls: 'text-success bg-success/10', value: loading ? '—' : `${working.length}`, valueCls: loading ? 'text-foreground' : numCls(working.length, 'text-success'), filter: 'working', trend: null as React.ReactNode },
     { id: 'idle', label: 'Idle', dotCls: 'bg-slate-400', icon: Timer, glowCls: 'text-slate-400 bg-slate-100', value: loading ? '—' : `${idle.length}`, valueCls: 'text-muted-foreground', filter: 'idle', trend: null },
-    { id: 'completed', label: 'Completed', dotCls: 'bg-completed', icon: CheckCircle2, glowCls: 'text-completed bg-completed/10', value: recordsLoading ? '—' : `${totalCompleted}`, valueCls: recordsLoading ? 'text-foreground' : numCls(totalCompleted, 'text-completed'), filter: 'completed', trend: null },
+    { id: 'completed', label: 'Completed Today', dotCls: 'bg-completed', icon: CheckCircle2, glowCls: 'text-completed bg-completed/10', value: recordsLoading ? '—' : `${totalCompleted}`, valueCls: recordsLoading ? 'text-foreground' : numCls(totalCompleted, 'text-completed'), filter: 'completed', trend: null },
     { id: 'hours', label: 'Hours Today', dotCls: 'bg-earth', icon: Clock, glowCls: 'text-earth bg-earth/10', value: recordsLoading ? '—' : `${totalHoursToday.toFixed(1)}h`, valueCls: recordsLoading ? 'text-foreground' : numCls(totalHoursToday, 'text-earth'), filter: 'hours', trend: !recordsLoading && <TrendBadge current={totalHoursToday} previous={totalHoursYesterday} /> },
     { id: 'due-soon', label: 'Due Soon', dotCls: 'bg-idle', icon: Wrench, glowCls: 'text-idle bg-idle/10', value: loading ? '—' : `${dueSoon.length}`, valueCls: loading ? 'text-foreground' : numCls(dueSoon.length, 'text-idle'), filter: 'due-soon', trend: null },
     { id: 'overdue', label: 'Overdue', dotCls: 'bg-danger', icon: AlertTriangle, glowCls: 'text-danger bg-danger/10', value: loading ? '—' : `${overdue.length}`, valueCls: loading ? 'text-foreground' : numCls(overdue.length, 'text-danger'), filter: 'overdue', trend: null },
-    { id: 'cost', label: 'Maint. Cost', dotCls: 'bg-primary', icon: BarChart3, glowCls: 'text-primary bg-primary/10', value: totalMaintCost === null ? '—' : totalMaintCost >= 1000 ? `Rs ${(totalMaintCost / 1000).toFixed(0)}K` : `Rs ${totalMaintCost}`, valueCls: totalMaintCost ? 'text-primary' : 'text-muted-foreground', filter: 'cost', trend: null },
+    { id: 'cost', label: 'Maint. Cost', dotCls: 'bg-primary', icon: BarChart3, glowCls: 'text-primary bg-primary/10', value: totalMaintCost === null ? '—' : moneyShort(totalMaintCost), valueCls: totalMaintCost ? 'text-primary' : 'text-muted-foreground', filter: 'cost', trend: null },
   ];
 
   return (

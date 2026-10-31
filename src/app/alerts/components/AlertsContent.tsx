@@ -6,43 +6,28 @@ import { supabase } from '@/lib/supabaseClient';
 import { syncAlerts } from '@/lib/alertsSync';
 import { useMachines } from '@/lib/useMachines';
 import { useCurrentProject } from '@/lib/ProjectContext';
+import { alertFromDb, type DbAlert, type MaintenanceAlert } from '@/lib/alerts';
 
-type DbAlert = {
-  id: string;
-  machine_id: string;
-  machine_name: string;
-  machine_code: string;
-  part: string;
-  hours_since: number;
-  limit_hours: number;
-  remaining: number;
-  status: string;
-};
+// Dismissals are remembered per project in this browser. Each one is keyed by the
+// alert's severity, part and limit, so an alert that escalates (Due Soon -> Overdue)
+// or starts a new maintenance cycle shows up again instead of staying hidden.
+const dismissedStorageKey = (projectId: string) => `skbequip_dismissed_alerts_${projectId}`;
 
-type MaintenanceAlert = {
-  id: string;
-  machineId: string;
-  machineName: string;
-  machineIdCode: string;
-  part: string;
-  hoursSince: number;
-  limit: number;
-  remaining: number;
-  severity: 'overdue' | 'due-soon';
-};
+function alertSignature(a: MaintenanceAlert): string {
+  return `${a.id}|${a.severity}|${a.part}|${a.limit}`;
+}
 
-function fromDb(row: DbAlert): MaintenanceAlert {
-  return {
-    id: row.id,
-    machineId: row.machine_id,
-    machineName: row.machine_name,
-    machineIdCode: row.machine_code,
-    part: row.part,
-    hoursSince: row.hours_since,
-    limit: row.limit_hours,
-    remaining: row.remaining,
-    severity: row.status.toLowerCase().replace(' ', '-') as 'overdue' | 'due-soon',
-  };
+function loadDismissed(projectId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(dismissedStorageKey(projectId));
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissed(projectId: string, signatures: Set<string>) {
+  localStorage.setItem(dismissedStorageKey(projectId), JSON.stringify([...signatures]));
 }
 
 export default function AlertsContent() {
@@ -63,18 +48,31 @@ export default function AlertsContent() {
       setLoading(true);
       await syncAlerts(currentProjectId);
       const { data } = await supabase.from('alerts').select('*').eq('project_id', currentProjectId).order('remaining', { ascending: true });
-      if (data) setAlerts(data.map(fromDb));
+      if (data) {
+        const loaded = (data as DbAlert[]).map(alertFromDb);
+        // Drop dismissals for alerts that no longer exist (resolved or changed),
+        // so storage doesn't grow and a recurring alert isn't hidden forever.
+        const current = new Set(loaded.map(alertSignature));
+        const stillRelevant = new Set([...loadDismissed(currentProjectId)].filter(sig => current.has(sig)));
+        saveDismissed(currentProjectId, stillRelevant);
+        setDismissed(stillRelevant);
+        setAlerts(loaded);
+      }
       setLoading(false);
     };
     load();
   }, [currentProjectId, ready]);
 
-  const activeAlerts = alerts.filter(a => !dismissed.has(a.id));
+  const activeAlerts = alerts.filter(a => !dismissed.has(alertSignature(a)));
   const overdueAlerts = activeAlerts.filter(a => a.severity === 'overdue');
   const dueSoonAlerts = activeAlerts.filter(a => a.severity === 'due-soon');
 
-  const handleDismiss = (id: string) => setDismissed(prev => new Set([...prev, id]));
-  const handleDismissAll = () => setDismissed(new Set(alerts.map(a => a.id)));
+  const updateDismissed = (next: Set<string>) => {
+    setDismissed(next);
+    if (currentProjectId) saveDismissed(currentProjectId, next);
+  };
+  const handleDismiss = (alert: MaintenanceAlert) => updateDismissed(new Set([...dismissed, alertSignature(alert)]));
+  const handleDismissAll = () => updateDismissed(new Set(alerts.map(alertSignature)));
 
   const AlertCard = ({ alert }: { alert: MaintenanceAlert }) => {
     const isOverdue = alert.severity === 'overdue';
@@ -97,7 +95,7 @@ export default function AlertsContent() {
               <p className="text-xs text-muted-foreground">Machine ID: {alert.machineIdCode}</p>
             </div>
           </div>
-          <button onClick={() => handleDismiss(alert.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0" title="Dismiss alert">
+          <button onClick={() => handleDismiss(alert)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0" title="Dismiss alert">
             <BellOff size={14} />
           </button>
         </div>

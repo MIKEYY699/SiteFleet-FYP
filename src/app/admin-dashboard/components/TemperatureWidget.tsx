@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ChevronDown, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
-import { fetchWeather, weatherIcon, weatherLabel, WeatherSnapshot } from '@/lib/weather';
+import { fetchWeather, geocodeLocation, weatherIcon, weatherLabel, WeatherSnapshot } from '@/lib/weather';
 
 interface WeatherLocation {
   id: string;
@@ -29,7 +29,13 @@ export default function TemperatureWidget() {
         .select('*')
         .eq('project_id', currentProjectId)
         .order('created_at', { ascending: true });
-      const rows = (data || []) as WeatherLocation[];
+      let rows = (data || []) as WeatherLocation[];
+      // No saved weather locations: fall back to the project's own location, if any.
+      if (rows.length === 0) {
+        const { data: project } = await supabase.from('projects').select('location').eq('id', currentProjectId).maybeSingle();
+        const geo = project?.location ? await geocodeLocation(project.location) : null;
+        if (geo) rows = [{ id: 'project-location', name: geo.displayName, latitude: geo.latitude, longitude: geo.longitude }];
+      }
       setLocations(rows);
       const storedId = localStorage.getItem(`skbequip_weather_selected_${currentProjectId}`);
       const initial = rows.find(r => r.id === storedId) || rows[0];

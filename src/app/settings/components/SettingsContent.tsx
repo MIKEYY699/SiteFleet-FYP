@@ -5,6 +5,8 @@ import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { geocodeLocation } from '@/lib/weather';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { DEFAULT_DUE_SOON_THRESHOLD, syncAlerts } from '@/lib/alertsSync';
 import { MapPin, X as XIcon } from 'lucide-react';
 
 export default function SettingsContent() {
@@ -25,11 +27,12 @@ export default function SettingsContent() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [notifyOverdue, setNotifyOverdue] = useState(true);
   const [notifyDueSoon, setNotifyDueSoon] = useState(true);
-  const [dueSoonThreshold, setDueSoonThreshold] = useState(20);
+  const [dueSoonThreshold, setDueSoonThreshold] = useState(DEFAULT_DUE_SOON_THRESHOLD);
   const [autoReset, setAutoReset] = useState(true);
   const [currency, setCurrency] = useState('PKR');
   const [timezone, setTimezone] = useState('Asia/Karachi');
   const { toasts, addToast, removeToast } = useToast();
+  const { setSettings } = useAppSettings();
 
   useEffect(() => {
     if (!ready) return;
@@ -47,7 +50,7 @@ export default function SettingsContent() {
         setTimezone(settings.timezone || 'Asia/Karachi');
         setNotifyOverdue(settings.notify_overdue);
         setNotifyDueSoon(settings.notify_due_soon);
-        setDueSoonThreshold(settings.due_soon_threshold ?? 20);
+        setDueSoonThreshold(settings.due_soon_threshold ?? DEFAULT_DUE_SOON_THRESHOLD);
         setAutoReset(settings.auto_reset);
       }
       if (userData?.user) {
@@ -125,6 +128,7 @@ export default function SettingsContent() {
     }).eq('id', 1);
     setSaving('');
     if (error) { addToast('error', 'Could not save', error.message); return; }
+    setSettings({ currency, timezone });
     addToast('success', 'Settings saved', 'Company settings updated successfully');
   };
 
@@ -153,6 +157,8 @@ export default function SettingsContent() {
     }).eq('id', 1);
     setSaving('');
     if (error) { addToast('error', 'Could not save', error.message); return; }
+    // The due-soon threshold changes which alerts exist, so recompute them now.
+    await syncAlerts();
     addToast('success', 'Settings saved', 'Notification settings updated successfully');
   };
 
@@ -163,6 +169,8 @@ export default function SettingsContent() {
     }).eq('id', 1);
     setSaving('');
     if (error) { addToast('error', 'Could not save', error.message); return; }
+    // Auto-reset changes which service each countdown starts from, so recompute now.
+    await syncAlerts();
     addToast('success', 'Settings saved', 'Maintenance settings updated successfully');
   };
 

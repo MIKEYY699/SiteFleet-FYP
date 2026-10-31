@@ -5,41 +5,8 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { syncAlerts } from '@/lib/alertsSync';
 import { useCurrentProject } from '@/lib/ProjectContext';
-
-type DbAlert = {
-  id: string;
-  machine_name: string;
-  machine_code: string;
-  part: string;
-  hours_since: number;
-  limit_hours: number;
-  remaining: number;
-  status: string;
-};
-
-type Alert = {
-  id: string;
-  machineName: string;
-  machineIdCode: string;
-  part: string;
-  hoursSince: number;
-  limit: number;
-  remaining: number;
-  severity: 'overdue' | 'due-soon';
-};
-
-function fromDb(row: DbAlert): Alert {
-  return {
-    id: row.id,
-    machineName: row.machine_name,
-    machineIdCode: row.machine_code,
-    part: row.part,
-    hoursSince: row.hours_since,
-    limit: row.limit_hours,
-    remaining: row.remaining,
-    severity: row.status.toLowerCase().replace(' ', '-') as 'overdue' | 'due-soon',
-  };
-}
+import { useRole } from '@/lib/RoleContext';
+import { alertFromDb, type DbAlert, type MaintenanceAlert } from '@/lib/alerts';
 
 const SEV_CONFIG = {
   overdue: { bg: 'bg-danger/8 border-danger/20', icon: 'text-danger', label: 'Overdue', labelCls: 'maint-overdue' },
@@ -48,7 +15,8 @@ const SEV_CONFIG = {
 
 export default function MaintenanceAlertsPanel() {
   const { currentProjectId, ready } = useCurrentProject();
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const { isOperator } = useRole();
+  const [alerts, setAlerts] = useState<MaintenanceAlert[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -60,13 +28,14 @@ export default function MaintenanceAlertsPanel() {
     }
     const load = async () => {
       setLoading(true);
-      await syncAlerts(currentProjectId);
+      // Only operators may write alerts; viewers read the latest computed ones.
+      if (isOperator) await syncAlerts(currentProjectId);
       const { data } = await supabase.from('alerts').select('*').eq('project_id', currentProjectId).order('remaining', { ascending: true });
-      if (data) setAlerts(data.map(fromDb));
+      if (data) setAlerts((data as DbAlert[]).map(alertFromDb));
       setLoading(false);
     };
     load();
-  }, [currentProjectId, ready]);
+  }, [currentProjectId, ready, isOperator]);
 
   const displayAlerts = alerts.slice(0, 4);
 

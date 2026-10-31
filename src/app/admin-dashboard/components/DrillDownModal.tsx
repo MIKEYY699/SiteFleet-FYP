@@ -4,23 +4,15 @@ import { X, MapPin, User, Clock, Wrench, AlertTriangle } from 'lucide-react';
 import { useMachines, Machine } from '@/lib/useMachines';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
+import { alertFromDb, type DbAlert, type MaintenanceAlert } from '@/lib/alerts';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { todayInTz } from '@/lib/format';
 import { StatusBadge, MaintStatusBadge } from '@/components/ui/StatusBadge';
 
 interface DrillDownModalProps {
   filter: string | null;
   onClose: () => void;
 }
-
-type Alert = {
-  id: string;
-  machineName: string;
-  machineIdCode: string;
-  part: string;
-  hoursSince: number;
-  limit: number;
-  remaining: number;
-  severity: 'overdue' | 'due-soon';
-};
 
 type WorkRecordRow = {
   id: string;
@@ -59,7 +51,8 @@ function getTitle(filter: string): string {
 export default function DrillDownModal({ filter, onClose }: DrillDownModalProps) {
   const { machines } = useMachines();
   const { currentProjectId } = useCurrentProject();
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const { timezone, money } = useAppSettings();
+  const [alerts, setAlerts] = useState<MaintenanceAlert[]>([]);
   const [todayRecords, setTodayRecords] = useState<WorkRecordRow[]>([]);
   const [costRecords, setCostRecords] = useState<MaintCostRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,16 +63,7 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
       if (filter === 'due-soon' || filter === 'overdue') {
         const { data } = await supabase.from('alerts').select('*').eq('project_id', currentProjectId);
         if (data) {
-          setAlerts(data.map((row) => ({
-            id: row.id,
-            machineName: row.machine_name,
-            machineIdCode: row.machine_code,
-            part: row.part,
-            hoursSince: row.hours_since,
-            limit: row.limit_hours,
-            remaining: row.remaining,
-            severity: row.status.toLowerCase().replace(' ', '-') as 'overdue' | 'due-soon',
-          })));
+          setAlerts((data as DbAlert[]).map(alertFromDb));
         }
       }
       if (filter === 'cost') {
@@ -91,8 +75,7 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
         if (data) setCostRecords(data as MaintCostRow[]);
       }
       if (filter === 'completed') {
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const todayStr = todayInTz(timezone);
         const { data } = await supabase
           .from('work_records')
           .select('id, machine_name, machine_code, operator, project_site, total_hours, status')
@@ -104,7 +87,7 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
       setLoading(false);
     };
     load();
-  }, [filter, currentProjectId]);
+  }, [filter, currentProjectId, timezone]);
 
   if (!filter) return null;
 
@@ -201,7 +184,7 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
                           <td className="px-4 py-3 text-sm text-foreground">{r.part_repaired_or_replaced}</td>
                           <td className="px-4 py-3 text-sm text-foreground">{r.maintenance_type}</td>
                           <td className="px-4 py-3 text-sm text-foreground font-tabular">{r.maintenance_date}</td>
-                          <td className="px-4 py-3 text-right font-tabular font-700 text-foreground">{r.cost_of_maintenance ? `Rs ${r.cost_of_maintenance.toLocaleString()}` : '—'}</td>
+                          <td className="px-4 py-3 text-right font-tabular font-700 text-foreground">{r.cost_of_maintenance ? money(r.cost_of_maintenance) : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -209,7 +192,7 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
                 </div>
                 <div className="flex justify-end mt-3 pr-1">
                   <span className="text-sm font-700 text-foreground">
-                    Total: Rs {costRecords.reduce((s, r) => s + (r.cost_of_maintenance || 0), 0).toLocaleString()}
+                    Total: {money(costRecords.reduce((s, r) => s + (r.cost_of_maintenance || 0), 0))}
                   </span>
                 </div>
               </div>
