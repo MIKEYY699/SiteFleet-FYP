@@ -7,6 +7,7 @@ import { StatusBadge, MaintStatusBadge } from '@/components/ui/StatusBadge';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import MachineFormModal from './MachineFormModal';
+import { CardGridSkeleton } from '@/components/ui/LoadingSkeleton';
 
 export default function MachineProfilesListContent() {
   const { machines, loading, error, reload } = useMachines();
@@ -25,11 +26,6 @@ export default function MachineProfilesListContent() {
     return matchSearch && matchStatus && matchMaint;
   });
 
-  const MAINT_INDICATOR: Record<string, string> = {
-    good: '🟢',
-    'due-soon': '🟡',
-    overdue: '🔴',
-  };
 
   return (
     <div className="space-y-6">
@@ -86,9 +82,7 @@ export default function MachineProfilesListContent() {
       </div>
 
       {/* Machine cards grid */}
-      {loading && (
-        <div className="text-center py-12 text-sm text-muted-foreground">Loading machines…</div>
-      )}
+      {loading && <CardGridSkeleton />}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(m => (
           <Link
@@ -127,7 +121,6 @@ export default function MachineProfilesListContent() {
             <div className="flex items-center justify-between pt-3 border-t border-border">
               <StatusBadge status={m.status} size="sm" />
               <div className="flex items-center gap-1.5">
-                <span className="text-xs">{MAINT_INDICATOR[m.maintStatus]}</span>
                 <MaintStatusBadge status={m.maintStatus} size="sm" />
               </div>
             </div>

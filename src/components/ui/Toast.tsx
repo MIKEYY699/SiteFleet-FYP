@@ -41,7 +41,7 @@ function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: st
         <p className="text-sm font-600 text-foreground">{toast.title}</p>
         {toast.message && <p className="text-xs text-muted-foreground mt-0.5">{toast.message}</p>}
       </div>
-      <button onClick={() => onRemove(toast.id)} className="p-0.5 text-muted-foreground hover:text-foreground flex-shrink-0">
+      <button onClick={() => onRemove(toast.id)} aria-label="Dismiss notification" className="p-0.5 text-muted-foreground hover:text-foreground flex-shrink-0">
         <X size={14} />
       </button>
     </div>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ChevronDown, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
+import { useRole } from '@/lib/RoleContext';
 import { fetchWeather, geocodeLocation, weatherIcon, weatherLabel, WeatherSnapshot } from '@/lib/weather';
 
 interface WeatherLocation {
@@ -15,6 +16,7 @@ interface WeatherLocation {
 
 export default function TemperatureWidget() {
   const { currentProjectId, ready } = useCurrentProject();
+  const { isOperator } = useRole();
   const [locations, setLocations] = useState<WeatherLocation[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [snapshot, setSnapshot] = useState<WeatherSnapshot | null>(null);
@@ -77,10 +79,23 @@ export default function TemperatureWidget() {
   if (!ready) return null;
 
   if (locations.length === 0) {
+    // Only operators can open Settings, so viewers just get a hint.
+    if (!isOperator) {
+      return (
+        <span
+          title="No weather location set for this project"
+          aria-label="No weather location set for this project"
+          className="flex items-center px-2 py-1.5 text-muted-foreground/60"
+        >
+          <MapPin size={16} />
+        </span>
+      );
+    }
     return (
       <Link
         href="/settings"
         title="Add a location in Settings to see live weather"
+        aria-label="Add a weather location in Settings"
         className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
       >
         <MapPin size={16} />
@@ -95,6 +110,8 @@ export default function TemperatureWidget() {
     <div className="relative" data-weather-widget>
       <button
         onClick={() => setOpen(prev => !prev)}
+        aria-label="Weather details"
+        aria-expanded={open}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-muted transition-colors"
       >
         <span className="text-base leading-none">{loading || !snapshot ? '…' : weatherIcon(snapshot.weatherCode, snapshot.isDay)}</span>

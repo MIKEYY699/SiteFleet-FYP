@@ -7,6 +7,7 @@ import { syncAlerts } from '@/lib/alertsSync';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { useRole } from '@/lib/RoleContext';
 import { alertFromDb, type DbAlert, type MaintenanceAlert } from '@/lib/alerts';
+import { ListSkeleton } from '@/components/ui/LoadingSkeleton';
 
 const SEV_CONFIG = {
   overdue: { bg: 'bg-danger/8 border-danger/20', icon: 'text-danger', label: 'Overdue', labelCls: 'maint-overdue' },
@@ -56,7 +57,7 @@ export default function MaintenanceAlertsPanel() {
       </div>
       <div className="p-4 space-y-3">
         {loading ? (
-          <p className="text-xs text-muted-foreground text-center py-6">Checking machines…</p>
+          <ListSkeleton rows={3} compact />
         ) : displayAlerts.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-6">No active alerts — all machines in good standing.</p>
         ) : displayAlerts.map((alert) => {

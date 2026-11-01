@@ -7,10 +7,12 @@ import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { syncAlerts } from '@/lib/alertsSync';
 import { newId } from '@/lib/ids';
+import { formatDisplayDate } from '@/lib/format';
 
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import MaintenanceFormModal from './MaintenanceFormModal';
 import MaintenanceHistoryPanel from './MaintenanceHistoryPanel';
+import { TableRowSkeleton } from '@/components/ui/LoadingSkeleton';
 
 type DbMaintenanceRecord = {
   id: string;
@@ -263,11 +265,7 @@ export default function MaintenanceContent() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
-                    Loading maintenance records…
-                  </td>
-                </tr>
+                Array.from({ length: 5 }).map((_, i) => <TableRowSkeleton key={`maint-skel-${i}`} cols={8} />)
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
@@ -281,7 +279,7 @@ export default function MaintenanceContent() {
                     <p className="text-xs text-muted-foreground mt-0.5 font-tabular">{r.machineId}</p>
                   </td>
                   <td className="px-4 py-3.5">
-                    <span className="text-sm text-foreground font-tabular">{r.maintenanceDate}</span>
+                    <span className="text-sm text-foreground font-tabular">{formatDisplayDate(r.maintenanceDate)}</span>
                   </td>
                   <td className="px-4 py-3.5">
                     <span className={`text-2xs font-600 px-2 py-0.5 rounded-full ${TYPE_COLORS[r.maintenanceType]}`}>

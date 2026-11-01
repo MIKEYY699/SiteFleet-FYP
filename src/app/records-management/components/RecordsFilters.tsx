@@ -43,6 +43,7 @@ export default function RecordsFilters({ filters, onChange, siteOptions }: Recor
           {filters.search && (
             <button
               onClick={() => update('search', '')}
+              aria-label="Clear search"
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X size={13} />

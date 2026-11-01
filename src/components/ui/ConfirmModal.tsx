@@ -1,5 +1,6 @@
 'use client';
-import React from 'react';
+import React, { useId } from 'react';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import { AlertTriangle } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -15,17 +16,26 @@ interface ConfirmModalProps {
 export default function ConfirmModal({
   open, onClose, onConfirm, title, message, confirmLabel = 'Delete', loading = false,
 }: ConfirmModalProps) {
+  const titleId = useId();
+  // Esc or a click outside cancels — except while the action is running.
+  useEscapeKey(onClose, open && !loading);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in">
-      <div className="w-full max-w-sm bg-card rounded-xl border border-border card-shadow-md scale-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in" onClick={() => { if (!loading) onClose(); }}>
+      <div
+        className="w-full max-w-sm bg-card rounded-xl border border-border card-shadow-md scale-in"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="p-6">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center flex-shrink-0">
               <AlertTriangle size={20} className="text-danger" />
             </div>
             <div>
-              <h3 className="text-sm font-700 text-foreground">{title}</h3>
+              <h3 id={titleId} className="text-sm font-700 text-foreground">{title}</h3>
               <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{message}</p>
             </div>
           </div>

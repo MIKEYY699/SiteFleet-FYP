@@ -8,6 +8,7 @@ import { geocodeLocation } from '@/lib/weather';
 import { useAppSettings } from '@/lib/AppSettingsContext';
 import { DEFAULT_DUE_SOON_THRESHOLD, syncAlerts } from '@/lib/alertsSync';
 import { MapPin, X as XIcon } from 'lucide-react';
+import { FormSkeleton } from '@/components/ui/LoadingSkeleton';
 
 export default function SettingsContent() {
   const { currentProjectId, currentProjectName, setCurrentProject, ready } = useCurrentProject();
@@ -186,7 +187,7 @@ export default function SettingsContent() {
   const inputCls = 'w-full px-3 py-2 text-sm bg-input border border-border rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 text-foreground';
 
   if (loading) {
-    return <div className="text-center py-16 text-sm text-muted-foreground">Loading settings…</div>;
+    return <FormSkeleton sections={4} />;
   }
 
   return (
@@ -269,7 +270,7 @@ export default function SettingsContent() {
                     <MapPin size={13} className="text-muted-foreground" />
                     {loc.name}
                   </span>
-                  <button onClick={() => handleRemoveLocation(loc.id)} className="p-1 rounded-md text-muted-foreground hover:text-danger hover:bg-danger/10 transition-colors">
+                  <button onClick={() => handleRemoveLocation(loc.id)} aria-label={`Remove ${loc.name}`} title="Remove location" className="p-1 rounded-md text-muted-foreground hover:text-danger hover:bg-danger/10 transition-colors">
                     <XIcon size={14} />
                   </button>
                 </div>

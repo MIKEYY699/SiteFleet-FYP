@@ -3,6 +3,8 @@ import React from 'react';
 import { X, Clock, Wrench, User, Calendar } from 'lucide-react';
 import { MaintenanceRecord } from '@/lib/maintenanceTypes';
 import { useAppSettings } from '@/lib/AppSettingsContext';
+import { useEscapeKey } from '@/lib/useEscapeKey';
+import { formatDisplayDate } from '@/lib/format';
 
 interface Props {
   machineId: string;
@@ -12,6 +14,7 @@ interface Props {
 
 export default function MaintenanceHistoryPanel({ machineId, records, onClose }: Props) {
   const { money } = useAppSettings();
+  useEscapeKey(onClose, true);
   const machineRecords = records
     .filter(r => r.machineId === machineId)
     .sort((a, b) => new Date(b.maintenanceDate).getTime() - new Date(a.maintenanceDate).getTime());
@@ -34,6 +37,8 @@ export default function MaintenanceHistoryPanel({ machineId, records, onClose }:
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in" onClick={onClose}>
       <div
         className="w-full max-w-2xl bg-card rounded-xl card-shadow-md border border-border scale-in max-h-[85vh] flex flex-col"
+        role="dialog"
+        aria-modal="true"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
@@ -41,7 +46,7 @@ export default function MaintenanceHistoryPanel({ machineId, records, onClose }:
             <h3 className="text-base font-700 text-foreground">Maintenance History</h3>
             <p className="text-xs text-muted-foreground mt-0.5">{machineName} · {machineId}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <button onClick={onClose} aria-label="Close" title="Close (Esc)" className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -79,7 +84,7 @@ export default function MaintenanceHistoryPanel({ machineId, records, onClose }:
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                       <div className="flex items-center gap-1.5 text-muted-foreground">
                         <Calendar size={11} />
-                        <span>{r.maintenanceDate}</span>
+                        <span>{formatDisplayDate(r.maintenanceDate)}</span>
                       </div>
                       {r.technicianName && (
                         <div className="flex items-center gap-1.5 text-muted-foreground">

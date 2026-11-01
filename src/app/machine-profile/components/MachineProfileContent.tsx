@@ -7,11 +7,12 @@ import { fetchMachineById, type Machine } from '@/lib/useMachines';
 import { supabase } from '@/lib/supabaseClient';
 import { StatusBadge, MaintStatusBadge } from '@/components/ui/StatusBadge';
 import { useAppSettings } from '@/lib/AppSettingsContext';
-import { todayInTz } from '@/lib/format';
+import { formatDisplayDate, todayInTz } from '@/lib/format';
 import { deleteMachine } from '@/lib/machineActions';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import MachineFormModal from './MachineFormModal';
+import { ProfileSkeleton } from '@/components/ui/LoadingSkeleton';
 
 interface Props {
   machineId: string;
@@ -97,7 +98,7 @@ export default function MachineProfileContent({ machineId }: Props) {
   }, [machineId, timezone, reloadKey]);
 
   if (dataLoading) {
-    return <div className="text-center py-20 text-sm text-muted-foreground">Loading machine profile…</div>;
+    return <ProfileSkeleton />;
   }
 
   if (!machine) {
@@ -136,12 +137,11 @@ export default function MachineProfileContent({ machineId }: Props) {
   const nextDueHours = nextDue ? nextDue.hours_at_maintenance + nextDue.recommended_hours_until_next : null;
   const remainingHours = nextDueHours != null ? nextDueHours - machine.totalLifetimeHours : null;
 
-  const getMaintStatusLabel = () => {
-    if (machine.maintStatus === 'overdue') return { label: 'Overdue', icon: '🔴' };
-    if (machine.maintStatus === 'due-soon') return { label: 'Due Soon', icon: '🟡' };
-    return { label: 'Good', icon: '🟢' };
-  };
-  const maintStatusInfo = getMaintStatusLabel();
+  const maintStatusInfo = {
+    overdue: { label: 'Overdue', dot: 'bg-red-300' },
+    'due-soon': { label: 'Due Soon', dot: 'bg-amber-300' },
+    good: { label: 'Good', dot: 'bg-emerald-300' },
+  }[machine.maintStatus] ?? { label: 'Good', dot: 'bg-emerald-300' };
 
   const STATUS_COLORS: Record<string, string> = { Active: 'maint-good', Due: 'maint-due-soon', Overdue: 'maint-overdue' };
   const TYPE_CLS: Record<string, string> = { Routine: 'bg-primary/10 text-primary', Repair: 'bg-warning/10 text-idle', Emergency: 'bg-danger/10 text-danger' };
@@ -162,7 +162,10 @@ export default function MachineProfileContent({ machineId }: Props) {
               <h1 className="font-display text-xl font-700 text-white">{machine.name}</h1>
               <p className="text-sm text-white/80 mt-0.5">{machine.machineId} · {machine.type}</p>
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full font-600">{maintStatusInfo.icon} {maintStatusInfo.label}</span>
+                <span className="inline-flex items-center gap-1.5 text-xs bg-white/20 text-white px-2 py-0.5 rounded-full font-600">
+                  <span className={`w-2 h-2 rounded-full ${maintStatusInfo.dot}`} aria-hidden="true" />
+                  {maintStatusInfo.label}
+                </span>
               </div>
             </div>
           </div>
@@ -218,7 +221,7 @@ export default function MachineProfileContent({ machineId }: Props) {
               <h2 className="text-sm font-700 text-foreground mb-4 flex items-center gap-2"><Wrench size={15} className="text-earth" />Maintenance Information</h2>
               <div className="space-y-3">
                 {[
-                  { label: 'Last Maintenance Date', value: lastMaint?.maintenance_date ?? 'No record' },
+                  { label: 'Last Maintenance Date', value: lastMaint ? formatDisplayDate(lastMaint.maintenance_date) : 'No record' },
                   { label: 'Last Repaired Part', value: lastMaint?.part_repaired_or_replaced ?? 'No record' },
                   { label: 'Next Maintenance Due', value: nextDue && nextDueHours != null ? `${nextDue.part_repaired_or_replaced} at ${nextDueHours.toLocaleString()}h` : 'Not scheduled' },
                   { label: 'Remaining Hours', value: remainingHours != null ? (remainingHours <= 0 ? `${Math.abs(remainingHours)}h overdue` : `${remainingHours}h`) : 'N/A' },
@@ -302,7 +305,7 @@ export default function MachineProfileContent({ machineId }: Props) {
                 <tbody>
                   {maintRecords.map(r => (
                     <tr key={r.id} className="border-b border-border table-row-hover last:border-0">
-                      <td className="px-5 py-3.5 font-tabular text-sm text-foreground">{r.maintenance_date}</td>
+                      <td className="px-5 py-3.5 font-tabular text-sm text-foreground">{formatDisplayDate(r.maintenance_date)}</td>
                       <td className="px-4 py-3.5">
                         <p className="font-600 text-sm text-foreground">{r.part_repaired_or_replaced}</p>
                         <p className="text-xs text-muted-foreground mt-0.5 max-w-[200px] truncate">{r.description_of_work}</p>
@@ -350,7 +353,7 @@ export default function MachineProfileContent({ machineId }: Props) {
                 <tbody>
                   {workRecords.map(r => (
                     <tr key={r.id} className="border-b border-border table-row-hover last:border-0">
-                      <td className="px-5 py-3.5 font-tabular text-sm text-foreground">{r.entry_date}</td>
+                      <td className="px-5 py-3.5 font-tabular text-sm text-foreground">{formatDisplayDate(r.entry_date)}</td>
                       <td className="px-4 py-3.5 text-sm text-foreground">{r.project_site}</td>
                       <td className="px-4 py-3.5 text-sm text-foreground">{r.operator}</td>
                       <td className="px-4 py-3.5 font-tabular text-sm text-foreground">{r.start_time}</td>

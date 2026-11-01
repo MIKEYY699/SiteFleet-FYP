@@ -7,6 +7,7 @@ import { syncAlerts } from '@/lib/alertsSync';
 import { useMachines } from '@/lib/useMachines';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { alertFromDb, type DbAlert, type MaintenanceAlert } from '@/lib/alerts';
+import { ListSkeleton } from '@/components/ui/LoadingSkeleton';
 
 // Dismissals are remembered per project in this browser. Each one is keyed by the
 // alert's severity, part and limit, so an alert that escalates (Due Soon -> Overdue)
@@ -87,15 +88,16 @@ export default function AlertsContent() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className={`text-2xs font-700 px-2 py-0.5 rounded-full ${isOverdue ? 'maint-overdue' : 'maint-due-soon'}`}>
-                  {isOverdue ? '🔴 Immediate Maintenance Required' : '🟡 Maintenance Due Soon'}
+                <span className={`inline-flex items-center gap-1.5 text-2xs font-700 px-2 py-0.5 rounded-full ${isOverdue ? 'maint-overdue' : 'maint-due-soon'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isOverdue ? 'bg-danger' : 'bg-warning'}`} aria-hidden="true" />
+                  {isOverdue ? 'Immediate Maintenance Required' : 'Maintenance Due Soon'}
                 </span>
               </div>
               <h3 className="font-700 text-sm text-foreground mt-1">{alert.machineName}</h3>
               <p className="text-xs text-muted-foreground">Machine ID: {alert.machineIdCode}</p>
             </div>
           </div>
-          <button onClick={() => handleDismiss(alert)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0" title="Dismiss alert">
+          <button onClick={() => handleDismiss(alert)} aria-label={`Dismiss alert for ${alert.machineName}`} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0" title="Dismiss alert">
             <BellOff size={14} />
           </button>
         </div>
@@ -170,7 +172,7 @@ export default function AlertsContent() {
         </div>
       </div>
 
-      {loading && <div className="text-center py-12 text-sm text-muted-foreground">Checking machines against maintenance limits…</div>}
+      {loading && <ListSkeleton rows={3} />}
 
       {!loading && overdueAlerts.length > 0 && (
         <div>

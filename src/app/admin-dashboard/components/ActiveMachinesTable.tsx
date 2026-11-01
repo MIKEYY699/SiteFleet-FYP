@@ -4,6 +4,7 @@ import { StatusBadge, MaintStatusBadge } from '@/components/ui/StatusBadge';
 import { useMachines } from '@/lib/useMachines';
 import Link from 'next/link';
 import { ExternalLink, HardHat, ArrowRight } from 'lucide-react';
+import { Skeleton } from '@/components/ui/LoadingSkeleton';
 
 export default function ActiveMachinesTable() {
   const { machines, loading } = useMachines();
@@ -25,7 +26,9 @@ export default function ActiveMachinesTable() {
         </span>
       </div>
       {loading ? (
-        <div className="flex-1 flex items-center justify-center py-10 text-sm text-muted-foreground">Loading machines…</div>
+        <div role="status" aria-label="Loading" className="p-4 space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={`am-skel-${i}`} className="h-9 w-full" />)}
+        </div>
       ) : (
         <div className="overflow-auto scrollbar-thin max-h-[360px]">
           <table className="w-full text-sm">

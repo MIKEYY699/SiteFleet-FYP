@@ -12,8 +12,9 @@ import autoTable from 'jspdf-autotable';
 import { syncAlerts } from '@/lib/alertsSync';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { useAppSettings } from '@/lib/AppSettingsContext';
-import { formatDateTimeInTz, todayInTz } from '@/lib/format';
+import { formatDateTimeInTz, formatDisplayDate, todayInTz } from '@/lib/format';
 import { newId } from '@/lib/ids';
+import { TableCardSkeleton } from '@/components/ui/LoadingSkeleton';
 
 export type WorkRecord = {
   id: string;
@@ -192,7 +193,7 @@ export default function RecordsContent() {
       startY: 32,
       head: [['Machine', 'Code', 'Date', 'Site', 'Operator', 'Start', 'End', 'Hours', 'Status']],
       body: filtered.map(r => [
-        r.machineName, r.machineId, r.entryDate, r.projectSite, r.operator, r.startTime, r.endTime || '—',
+        r.machineName, r.machineId, formatDisplayDate(r.entryDate), r.projectSite, r.operator, r.startTime, r.endTime || '—',
         r.totalHours != null ? `${r.totalHours}h` : '—', r.status,
       ]),
       styles: { fontSize: 8 },
@@ -288,7 +289,7 @@ export default function RecordsContent() {
   };
 
   if (loading) {
-    return <div className="text-center py-16 text-muted-foreground text-sm">Loading records…</div>;
+    return <TableCardSkeleton rows={8} cols={7} />;
   }
 
   return (

@@ -117,7 +117,7 @@ export default function Sidebar({ collapsed, mobileOpen, currentPath, role, onTo
         </nav>
 
         <div className="border-t border-slate-800 p-2">
-          <button onClick={onToggleCollapse} className="w-full flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-500 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+          <button onClick={onToggleCollapse} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : undefined} className="w-full flex items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-500 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
             {collapsed ? <ChevronRight size={16} /> : (<><ChevronLeft size={16} /><span>Collapse</span></>)}
           </button>
         </div>
@@ -129,7 +129,7 @@ export default function Sidebar({ collapsed, mobileOpen, currentPath, role, onTo
             <AppLogo src="/assets/images/SKBlogo-1785779727587.jpeg" size={32} />
             <span className="font-bold text-base text-white">SKBEquip</span>
           </div>
-          <button onClick={onMobileClose} className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800"><X size={18} /></button>
+          <button onClick={onMobileClose} aria-label="Close menu" className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800"><X size={18} /></button>
         </div>
         <nav className="flex-1 overflow-y-auto scrollbar-thin py-3 px-2">
           {visibleGroups.map((group) => (

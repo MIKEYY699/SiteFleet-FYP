@@ -9,6 +9,7 @@ import { ProjectProvider } from '@/lib/ProjectContext';
 import { AppSettingsProvider } from '@/lib/AppSettingsContext';
 import { RoleProvider } from '@/lib/RoleContext';
 import RouteLoadingBar from './RouteLoadingBar';
+import { Loader2 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 interface AppLayoutProps {
@@ -56,7 +57,10 @@ export default function AppLayout({ children, currentPath }: AppLayoutProps) {
   if (checkingAuth || !session || roleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-        <p className="text-sm text-muted-foreground">Checking your session…</p>
+        <div role="status" className="flex items-center gap-2.5 text-sm text-muted-foreground">
+          <Loader2 size={18} className="animate-spin text-primary" />
+          Checking your session…
+        </div>
       </div>
     );
   }

@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { alertFromDb, type DbAlert, type MaintenanceAlert } from '@/lib/alerts';
 import { useAppSettings } from '@/lib/AppSettingsContext';
-import { todayInTz } from '@/lib/format';
+import { useEscapeKey } from '@/lib/useEscapeKey';
+import { formatDisplayDate, todayInTz } from '@/lib/format';
 import { StatusBadge, MaintStatusBadge } from '@/components/ui/StatusBadge';
+import { ListSkeleton } from '@/components/ui/LoadingSkeleton';
 
 interface DrillDownModalProps {
   filter: string | null;
@@ -52,6 +54,7 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
   const { machines } = useMachines();
   const { currentProjectId } = useCurrentProject();
   const { timezone, money } = useAppSettings();
+  useEscapeKey(onClose, !!filter);
   const [alerts, setAlerts] = useState<MaintenanceAlert[]>([]);
   const [todayRecords, setTodayRecords] = useState<WorkRecordRow[]>([]);
   const [costRecords, setCostRecords] = useState<MaintCostRow[]>([]);
@@ -110,6 +113,8 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in" onClick={onClose}>
       <div
         className="w-full max-w-3xl bg-card rounded-xl card-shadow-md border border-border scale-in max-h-[85vh] flex flex-col"
+        role="dialog"
+        aria-modal="true"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
@@ -122,14 +127,14 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
                 : `${filteredMachines.length} machines`}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <button onClick={onClose} aria-label="Close" title="Close (Esc)" className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <X size={16} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-thin p-5">
           {loading ? (
-            <div className="text-center py-12 text-sm text-muted-foreground">Loading…</div>
+            <ListSkeleton rows={3} compact />
           ) : showAlerts ? (
             filteredAlerts.length > 0 ? (
               <div className="space-y-3">
@@ -183,7 +188,7 @@ export default function DrillDownModal({ filter, onClose }: DrillDownModalProps)
                           </td>
                           <td className="px-4 py-3 text-sm text-foreground">{r.part_repaired_or_replaced}</td>
                           <td className="px-4 py-3 text-sm text-foreground">{r.maintenance_type}</td>
-                          <td className="px-4 py-3 text-sm text-foreground font-tabular">{r.maintenance_date}</td>
+                          <td className="px-4 py-3 text-sm text-foreground font-tabular">{formatDisplayDate(r.maintenance_date)}</td>
                           <td className="px-4 py-3 text-right font-tabular font-700 text-foreground">{r.cost_of_maintenance ? money(r.cost_of_maintenance) : '—'}</td>
                         </tr>
                       ))}

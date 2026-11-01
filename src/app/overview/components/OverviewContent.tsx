@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { useAppSettings } from '@/lib/AppSettingsContext';
 import { todayInTz } from '@/lib/format';
+import { StatRowSkeleton, TableCardSkeleton } from '@/components/ui/LoadingSkeleton';
 
 interface ProjectRow {
   id: string;
@@ -94,7 +95,12 @@ export default function OverviewContent() {
   };
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground py-10 text-center">Loading company-wide data…</p>;
+    return (
+      <div className="space-y-6">
+        <StatRowSkeleton />
+        <TableCardSkeleton rows={4} cols={6} />
+      </div>
+    );
   }
 
   return (

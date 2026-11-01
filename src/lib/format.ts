@@ -106,8 +106,23 @@ export function formatTimeInTz(date: Date, tz: string): string {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: safeTz(tz) });
 }
 
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// The one date style shown on screen and in PDFs: "01 Nov 2026" (day first, month as
+// a word so it can't be misread). Takes a stored YYYY-MM-DD date; CSV exports keep
+// YYYY-MM-DD so spreadsheets sort them correctly.
+export function formatDisplayDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (!m) return dateStr;
+  const month = MONTHS_SHORT[Number(m[2]) - 1];
+  return month ? `${m[3]} ${month} ${m[1]}` : dateStr;
+}
+
+// Header date, e.g. "Sunday, 01 Nov 2026".
 export function formatLongDateInTz(date: Date, tz: string): string {
-  return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: safeTz(tz) });
+  const weekday = date.toLocaleDateString('en-US', { weekday: 'long', timeZone: safeTz(tz) });
+  return `${weekday}, ${formatDisplayDate(dateStrInTz(date, tz))}`;
 }
 
 export function formatDateTimeInTz(date: Date, tz: string): string {

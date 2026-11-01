@@ -9,6 +9,7 @@ import { useAppSettings } from '@/lib/AppSettingsContext';
 import { useRole } from '@/lib/RoleContext';
 import { todayInTz } from '@/lib/format';
 import { machineFromDb, recentWorkRecordsQuery, withLiveStatus, type DbMachine, type RecentWorkRecord } from '@/lib/useMachines';
+import { CardGridSkeleton } from '@/components/ui/LoadingSkeleton';
 
 interface ProjectRow {
   id: string;
@@ -102,7 +103,7 @@ export default function ProjectsContent() {
   };
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground py-10 text-center">Loading projects…</p>;
+    return <CardGridSkeleton count={3} />;
   }
 
   return (

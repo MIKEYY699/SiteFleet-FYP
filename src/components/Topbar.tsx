@@ -61,7 +61,7 @@ export default function Topbar({ onMobileMenuToggle, role, currentPath, lastUpda
 
   return (
     <header className="min-h-[64px] py-2 bg-card border-b border-border flex items-center px-4 lg:px-6 gap-4 flex-shrink-0 z-20">
-      <button onClick={onMobileMenuToggle} className="lg:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><Menu size={20} /></button>
+      <button onClick={onMobileMenuToggle} aria-label="Open menu" className="lg:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><Menu size={20} /></button>
 
       <div className="min-w-0">
         <h1 className="text-sm font-700 text-foreground truncate leading-tight">{meta.title}</h1>
@@ -76,31 +76,35 @@ export default function Topbar({ onMobileMenuToggle, role, currentPath, lastUpda
 
       <div className="flex-1" />
 
-      <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-  <button
-    onClick={onRefresh}
-    title="Reload this page's data"
-    className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted hover:text-foreground transition-colors"
-  >
-    <RefreshCw size={12} /><span>Updated {formatTimeInTz(lastUpdated, timezone)}</span>
-  </button>
-</div>
+      <button
+        onClick={onRefresh}
+        title="Reload this page's data"
+        aria-label={`Refresh data (last updated ${formatTimeInTz(lastUpdated, timezone)})`}
+        className="flex items-center gap-1.5 p-2 sm:px-2 sm:py-1 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+      >
+        <RefreshCw size={14} className="sm:w-3 sm:h-3" />
+        <span className="hidden sm:inline">Updated {formatTimeInTz(lastUpdated, timezone)}</span>
+      </button>
 
       <TemperatureWidget />
 
-      <Link href="/alerts" className="relative group">
-        <button className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-          <Bell size={20} />
-          {alertsCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full ring-2 ring-card" />
-          )}
-        </button>
+      <Link
+        href="/alerts"
+        aria-label={`Alerts: ${alertsCount}`}
+        className="relative group p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      >
+        <Bell size={20} />
+        {alertsCount > 0 && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full ring-2 ring-card" />
+        )}
         <span className="tooltip-base -bottom-8 left-1/2 -translate-x-1/2">{alertsCount} Alert{alertsCount === 1 ? '' : 's'}</span>
       </Link>
 
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuOpen(prev => !prev)}
+          aria-label="Account menu"
+          aria-expanded={menuOpen}
           className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors"
         >
           <User size={16} className="text-primary" />

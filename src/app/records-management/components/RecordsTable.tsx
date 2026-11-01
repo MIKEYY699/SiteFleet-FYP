@@ -4,6 +4,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import { ClipboardList, Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import type { WorkRecord } from './RecordsContent';
+import { formatDisplayDate } from '@/lib/format';
 
 type SortKey = 'machineName' | 'entryDate' | 'operator' | 'totalHours' | 'status';
 type SortDir = 'asc' | 'desc';
@@ -28,11 +29,6 @@ interface RecordsTableProps {
 
 const PER_PAGE_OPTIONS = [5, 10, 20, 50];
 
-function formatDate(d: string) {
-  if (!d) return '—';
-  const [y, m, day] = d.split('-');
-  return `${day}/${m}/${y}`;
-}
 
 function endTimeDisplay(status: WorkRecord['status'], endTime: string) {
   if (endTime) return endTime;
@@ -175,7 +171,7 @@ export default function RecordsTable({
                     <p className="text-xs text-muted-foreground mt-0.5">{record.machineType}</p>
                   </td>
                   <td className="px-2.5 py-2.5 font-tabular text-sm text-foreground whitespace-nowrap">
-                    {formatDate(record.entryDate)}
+                    {formatDisplayDate(record.entryDate)}
                   </td>
                   <td className="px-2.5 py-2.5 hidden lg:table-cell">
                     <span className="text-sm text-foreground truncate max-w-[160px] block">{record.projectSite}</span>
@@ -198,6 +194,7 @@ export default function RecordsTable({
                       <div className="relative group">
                         <button
                           onClick={() => onEdit(record)}
+                          aria-label={`Edit ${record.machineName} entry`}
                           className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-secondary transition-colors"
                         >
                           <Pencil size={14} />
@@ -207,6 +204,7 @@ export default function RecordsTable({
                       <div className="relative group">
                         <button
                           onClick={() => onDelete(record.id)}
+                          aria-label={`Delete ${record.machineName} entry`}
                           className="p-1.5 rounded-md text-muted-foreground hover:text-danger hover:bg-danger/10 transition-colors"
                         >
                           <Trash2 size={14} />
@@ -241,6 +239,7 @@ export default function RecordsTable({
           <div className="flex items-center gap-1">
             <button
               onClick={() => onPageChange(1)}
+              aria-label="First page"
               disabled={currentPage === 1}
               className="px-2.5 py-1.5 text-xs font-600 rounded-md border border-border text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
@@ -248,6 +247,7 @@ export default function RecordsTable({
             </button>
             <button
               onClick={() => onPageChange(currentPage - 1)}
+              aria-label="Previous page"
               disabled={currentPage === 1}
               className="px-2.5 py-1.5 text-xs font-600 rounded-md border border-border text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
@@ -257,6 +257,8 @@ export default function RecordsTable({
               <button
                 key={`page-${p}`}
                 onClick={() => onPageChange(p)}
+                aria-label={`Page ${p}`}
+                aria-current={p === currentPage ? 'page' : undefined}
                 className={`px-3 py-1.5 text-xs font-600 rounded-md border transition-colors
                   ${p === currentPage
                     ? 'bg-primary text-primary-foreground border-primary'
@@ -268,6 +270,7 @@ export default function RecordsTable({
             ))}
             <button
               onClick={() => onPageChange(currentPage + 1)}
+              aria-label="Next page"
               disabled={currentPage === totalPages}
               className="px-2.5 py-1.5 text-xs font-600 rounded-md border border-border text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
@@ -275,6 +278,7 @@ export default function RecordsTable({
             </button>
             <button
               onClick={() => onPageChange(totalPages)}
+              aria-label="Last page"
               disabled={currentPage === totalPages}
               className="px-2.5 py-1.5 text-xs font-600 rounded-md border border-border text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >

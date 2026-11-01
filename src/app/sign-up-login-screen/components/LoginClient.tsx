@@ -185,7 +185,7 @@ export default function LoginClient() {
                     className={`w-full px-4 py-2.5 pr-11 text-sm bg-input border rounded-md transition-all outline-none placeholder:text-muted-foreground text-foreground ${errors.password ? 'border-danger' : 'border-border focus:input-focus'}`}
                     {...register('password', { required: 'Password is required' })}
                   />
-                  <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                  <button type="button" onClick={() => setShowPassword(p => !p)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>

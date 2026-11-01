@@ -2,6 +2,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts';
 import { useMachines } from '@/lib/useMachines';
+import { Skeleton } from '@/components/ui/LoadingSkeleton';
 
 export default function FleetStatusChart() {
   const { machines, loading } = useMachines();
@@ -20,7 +21,9 @@ export default function FleetStatusChart() {
         <p className="text-2xs text-muted-foreground mt-0.5">What each machine is doing right now (not maintenance health)</p>
       </div>
       {loading ? (
-        <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">Loading…</div>
+        <div className="flex-1 flex items-center justify-center" role="status" aria-label="Loading">
+          <Skeleton className="w-40 h-40 rounded-full" />
+        </div>
       ) : STATUS_PIE.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">No machines yet.</div>
       ) : (

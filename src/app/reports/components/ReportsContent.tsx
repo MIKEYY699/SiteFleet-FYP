@@ -6,7 +6,7 @@ import { useMachines } from '@/lib/useMachines';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
 import { useAppSettings } from '@/lib/AppSettingsContext';
-import { formatDateTimeInTz, lastNDays, lastNMonths, todayInTz } from '@/lib/format';
+import { formatDateTimeInTz, formatDisplayDate, lastNDays, lastNMonths, todayInTz } from '@/lib/format';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 type MaintRow = {
@@ -53,7 +53,7 @@ export default function ReportsContent() {
       startY: 32,
       head: [['Machine', 'Code', 'Part', 'Type', 'Date', 'Cost']],
       body: maintRecords.map(r => [
-        r.machine_name, r.machine_code, r.part_repaired_or_replaced, r.maintenance_type, r.maintenance_date,
+        r.machine_name, r.machine_code, r.part_repaired_or_replaced, r.maintenance_type, formatDisplayDate(r.maintenance_date),
         r.cost_of_maintenance ? money(r.cost_of_maintenance) : '-',
       ]),
     });
@@ -228,7 +228,7 @@ export default function ReportsContent() {
                       {r.maintenance_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-foreground font-tabular">{r.maintenance_date}</td>
+                  <td className="px-4 py-3 text-sm text-foreground font-tabular">{formatDisplayDate(r.maintenance_date)}</td>
                  <td className="px-5 py-3 text-right font-tabular font-700 text-foreground">{money(r.cost_of_maintenance ?? 0)}</td>
                 </tr>
               ))}
