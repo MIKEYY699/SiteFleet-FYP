@@ -12,12 +12,9 @@ alerts, reports (CSV / PDF), and live site weather.
    npm install
    ```
 
-2. Create `.env` (or `.env.local`) in the project root:
-
-   ```bash
-   NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
-   ```
+2. Copy `.env.example` to `.env.local` and fill in your Supabase URL and anon key
+   (Supabase → Project Settings → API). The app refuses to start with a clear error
+   if either is missing.
 
 3. Run the dev server and open http://localhost:3000:
 
@@ -25,7 +22,8 @@ alerts, reports (CSV / PDF), and live site weather.
    npm run dev
    ```
 
-Other scripts: `npm run build`, `npm start`, `npm run lint`.
+Other scripts: `npm run build`, `npm start`, `npm run lint`, `npm run typecheck`,
+and `npm run check` (typecheck + lint, run this before committing).
 
 ## Supabase setup
 

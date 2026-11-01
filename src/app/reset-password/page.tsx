@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import ResetPasswordClient from './components/ResetPasswordClient';
 
 export const metadata: Metadata = {
-  title: 'Reset Password — SKBEquip',
+  title: 'Reset Password',
 };
 
 export default function ResetPasswordPage() {

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import AppImage from '@/components/ui/AppImage';
+import Image from 'next/image';
 import { Eye, EyeOff, Loader2, HardHat, AlertCircle, CheckCircle2, ClipboardList, Wrench, BarChart3 } from 'lucide-react';
 import { supabase, setRememberMe } from '@/lib/supabaseClient';
 
@@ -100,7 +100,7 @@ export default function LoginClient() {
       <div className="hidden lg:flex lg:w-[480px] xl:w-[520px] gradient-auth-panel flex-col justify-between p-10 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center overflow-hidden">
-            <AppImage src="/assets/images/SKBlogo-1785779727587.jpeg" alt="SKBEquip logo" width={40} height={40} className="w-full h-full object-cover" />
+            <Image priority src="/assets/images/SKBlogo-1785779727587.jpeg" alt="SKBEquip logo" width={40} height={40} className="w-full h-full object-cover" />
           </div>
           <span className="text-xl font-800 text-white tracking-tight">SKBEquip</span>
         </div>
@@ -131,7 +131,7 @@ export default function LoginClient() {
       <div className="flex-1 flex items-center justify-center p-6 bg-background">
         <div className="w-full max-w-md">
           <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div className="w-9 h-9 rounded-lg overflow-hidden"><AppImage src="/assets/images/SKBlogo-1785779727587.jpeg" alt="SKBEquip logo" width={36} height={36} className="w-full h-full object-cover" /></div>
+            <div className="w-9 h-9 rounded-lg overflow-hidden"><Image priority src="/assets/images/SKBlogo-1785779727587.jpeg" alt="SKBEquip logo" width={36} height={36} className="w-full h-full object-cover" /></div>
             <span className="text-lg font-800 text-foreground">SKBEquip</span>
           </div>
 

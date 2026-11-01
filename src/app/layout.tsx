@@ -23,7 +23,10 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'SKBEquip — Construction Equipment Management',
+  title: {
+    default: 'SKBEquip — Construction Equipment Management',
+    template: '%s — SKBEquip',
+  },
   description: 'Digitize machine work entries, track operator hours, and monitor maintenance schedules for your construction fleet from one dashboard.',
   icons: {
     icon: [{ url: '/favicon.ico', type: 'image/x-icon' }],

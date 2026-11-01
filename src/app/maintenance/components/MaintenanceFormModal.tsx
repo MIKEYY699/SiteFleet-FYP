@@ -39,7 +39,7 @@ export default function MaintenanceFormModal({ open, record, onClose, onSave }: 
 
   useEffect(() => {
     if (record) {
-      const { id, ...rest } = record;
+      const { id: _id, ...rest } = record;
       setForm(rest);
     } else {
       setForm({ ...EMPTY, maintenanceDate: todayInTz(timezone) });
@@ -170,7 +170,7 @@ export default function MaintenanceFormModal({ open, record, onClose, onSave }: 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
 <label className="block text-xs font-600 text-foreground mb-1">Recommended Hours Until Next <span className="text-danger">*</span></label>
-            <p className="text-2xs text-muted-foreground mb-1.5">How many more hours this part is good for before it's due again (e.g. service every 250h)</p>            <input
+            <p className="text-2xs text-muted-foreground mb-1.5">How many more hours this part is good for before it&apos;s due again (e.g. service every 250h)</p>            <input
               type="number"
               min={1}
               value={form.recommendedHoursUntilNext}
@@ -182,7 +182,7 @@ export default function MaintenanceFormModal({ open, record, onClose, onSave }: 
           </div>
           <div>
 <label className="block text-xs font-600 text-foreground mb-1">Machine Hours at Maintenance</label>
-            <p className="text-2xs text-muted-foreground mb-1.5">The machine's total hour reading right now, like an odometer</p>            <input
+            <p className="text-2xs text-muted-foreground mb-1.5">The machine&apos;s total hour reading right now, like an odometer</p>            <input
               type="number"
               min={0}
               value={form.hoursAtMaintenance}

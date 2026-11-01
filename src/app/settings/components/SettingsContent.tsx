@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Settings, Bell, Building2, User, Save, Wrench } from 'lucide-react';
+import { Bell, Building2, User, Save, Wrench } from 'lucide-react';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { supabase } from '@/lib/supabaseClient';
 import { useCurrentProject } from '@/lib/ProjectContext';
@@ -9,6 +9,20 @@ import { useAppSettings } from '@/lib/AppSettingsContext';
 import { DEFAULT_DUE_SOON_THRESHOLD, syncAlerts } from '@/lib/alertsSync';
 import { MapPin, X as XIcon } from 'lucide-react';
 import { FormSkeleton } from '@/components/ui/LoadingSkeleton';
+
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      onClick={() => onChange(!value)}
+      className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${value ? 'bg-primary' : 'bg-border'}`}
+    >
+      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
+    </button>
+  );
+}
 
 export default function SettingsContent() {
   const { currentProjectId, currentProjectName, setCurrentProject, ready } = useCurrentProject();
@@ -174,15 +188,6 @@ export default function SettingsContent() {
     await syncAlerts();
     addToast('success', 'Settings saved', 'Maintenance settings updated successfully');
   };
-
-  const Toggle = ({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) => (
-    <button
-      onClick={() => onChange(!value)}
-      className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${value ? 'bg-primary' : 'bg-border'}`}
-    >
-      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
-    </button>
-  );
 
   const inputCls = 'w-full px-3 py-2 text-sm bg-input border border-border rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 text-foreground';
 

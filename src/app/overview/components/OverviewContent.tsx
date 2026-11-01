@@ -181,7 +181,7 @@ export default function OverviewContent() {
       </div>
 
       <p className="text-2xs text-muted-foreground mt-3">
-        Looking for a specific site's own dashboard? Visit <Link href="/projects" className="text-primary hover:underline">Projects</Link> to switch.
+        Looking for a specific site&apos;s own dashboard? Visit <Link href="/projects" className="text-primary hover:underline">Projects</Link> to switch.
       </p>
     </div>
   );

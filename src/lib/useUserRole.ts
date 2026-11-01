@@ -16,7 +16,6 @@ export function useUserRole(userId: string | undefined) {
       setLoading(false);
     };
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   return { role, loading };

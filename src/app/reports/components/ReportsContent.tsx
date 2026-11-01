@@ -101,13 +101,6 @@ export default function ReportsContent() {
     .sort((a, b) => b.hours - a.hours)
     .slice(0, 8);
 
-  const STATUS_PIE = [
-    { name: 'Working', value: machines.filter(m => m.status === 'working').length, color: '#15A36B' },
-    { name: 'Idle', value: machines.filter(m => m.status === 'idle').length, color: '#D97706' },
-    { name: 'Maintenance', value: machines.filter(m => m.status === 'maintenance').length, color: '#E23F3F' },
-    { name: 'Completed', value: machines.filter(m => m.status === 'completed').length, color: '#0B5FCE' },
-  ];
-
   const MAINT_TYPE_PIE = [
     { name: 'Routine', value: maintRecords.filter(r => r.maintenance_type === 'Routine').length, color: '#0B5FCE' },
     { name: 'Repair', value: maintRecords.filter(r => r.maintenance_type === 'Repair').length, color: '#8B5E3C' },

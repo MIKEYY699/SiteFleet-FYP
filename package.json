@@ -1,15 +1,16 @@
 {
-  "name": "skb2-restored",
+  "name": "skbequip",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev -H localhost",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint"
   },
   "dependencies": {
-    "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.112.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
