@@ -14,6 +14,27 @@ Run it once, at the same time you start using the matching app code (it moves th
 
 If anything fails, nothing is changed (the file runs as one transaction).
 
+## 20261103000000_report_totals.sql
+
+Adds four read-only functions that add up totals inside the database (hours per
+day, maintenance summary, project overview, list of sites), plus one index. Reports,
+Overview, the dashboard cost card and the Records/Maintenance counters use them.
+Without this file those parts of the app show "The database is missing an update".
+
+It only adds things; it does not change or delete any data. Safe to run again.
+
+1. Supabase → **SQL Editor** → **New query**
+2. Paste the whole file → **Run**
+3. You should see "Success. No rows returned".
+
+**Check it worked** (run in a new query, change the date to today):
+
+```sql
+select * from public.project_overview('2026-11-03');
+```
+
+You should get one row per project with machine counts and totals.
+
 ## Useful snippets
 
 **Make someone an operator** (new sign-ups are viewers):

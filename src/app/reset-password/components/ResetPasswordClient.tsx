@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, CheckCircle2, KeyRound } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import { friendlyError } from '@/lib/errors';
 
 // Landing page for the "Forgot password?" email. Supabase signs the user in from the
 // link (detectSessionInUrl), then they choose a new password here.
@@ -47,7 +48,7 @@ export default function ResetPasswordClient() {
     setError('');
     const { error: updateError } = await supabase.auth.updateUser({ password });
     setSaving(false);
-    if (updateError) { setError(updateError.message); return; }
+    if (updateError) { setError(friendlyError(updateError)); return; }
     setState('done');
     setTimeout(() => router.push('/admin-dashboard'), 1500);
   };

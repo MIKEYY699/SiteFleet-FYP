@@ -1,9 +1,12 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from './supabaseClient';
 import { useCurrentProject } from './ProjectContext';
 import { useAppSettings } from './AppSettingsContext';
 import { addDays, todayInTz } from './format';
+import { friendlyError } from './errors';
+import { queryKeys } from './queryClient';
 
 export type MachineStatus = 'working' | 'completed' | 'idle' | 'maintenance';
 export type MaintStatus = 'good' | 'due-soon' | 'overdue';
@@ -100,55 +103,57 @@ export function withLiveStatus(machines: Machine[], records: RecentWorkRecord[],
   });
 }
 
-export async function fetchMachineById(id: string, todayStr: string): Promise<Machine | null> {
+// `machine` is null with no error when the id doesn't exist; `error` is set when the
+// lookup itself failed, so the caller can say "couldn't load" instead of "not found".
+export async function fetchMachineById(id: string, todayStr: string): Promise<{ machine: Machine | null; error: string | null }> {
   const { data, error } = await supabase.from('machines').select('*').eq('id', id).maybeSingle();
-  if (error || !data) return null;
+  if (error) return { machine: null, error: friendlyError(error) };
+  if (!data) return { machine: null, error: null };
   const machine = machineFromDb(data as DbMachine);
-  const { data: records } = await recentWorkRecordsQuery(todayStr)
+  const { data: records, error: recordsError } = await recentWorkRecordsQuery(todayStr)
     .eq('machine_code', machine.machineId)
     .eq('project_id', machine.projectId);
-  return withLiveStatus([machine], (records || []) as RecentWorkRecord[], todayStr)[0];
+  if (recordsError) return { machine: null, error: friendlyError(recordsError) };
+  return { machine: withLiveStatus([machine], (records || []) as RecentWorkRecord[], todayStr)[0], error: null };
 }
 
+async function loadMachines(projectId: string, timezone: string): Promise<Machine[]> {
+  const todayStr = todayInTz(timezone);
+  const [machinesRes, recordsRes] = await Promise.all([
+    supabase.from('machines').select('*').eq('project_id', projectId).order('name'),
+    recentWorkRecordsQuery(todayStr).eq('project_id', projectId),
+  ]);
+  const error = machinesRes.error || recordsRes.error;
+  if (error) throw new Error(friendlyError(error));
+  return withLiveStatus(
+    ((machinesRes.data || []) as DbMachine[]).map(machineFromDb),
+    (recordsRes.data || []) as RecentWorkRecord[],
+    todayStr,
+  );
+}
+
+const NO_MACHINES: Machine[] = [];
+
+// The current project's machines with live status. Backed by TanStack Query, so the
+// many widgets that call this on one screen share a single request and cache.
+// After changing machine data, call invalidateFleetData() (lib/queryClient).
 export function useMachines() {
   const { currentProjectId, ready } = useCurrentProject();
   const { timezone } = useAppSettings();
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const reload = useCallback(() => setReloadKey(k => k + 1), []);
+  const enabled = ready && !!currentProjectId;
+  const query = useQuery({
+    queryKey: queryKeys.machines(currentProjectId, timezone),
+    queryFn: () => loadMachines(currentProjectId!, timezone),
+    enabled,
+  });
+  const { refetch } = query;
+  const reload = useCallback(() => { refetch(); }, [refetch]);
 
-  useEffect(() => {
-    if (!ready) return;
-
-    if (!currentProjectId) {
-      setMachines([]);
-      setLoading(false);
-      return;
-    }
-
-    const load = async () => {
-      setLoading(true);
-      const todayStr = todayInTz(timezone);
-      const [machinesRes, recordsRes] = await Promise.all([
-        supabase.from('machines').select('*').eq('project_id', currentProjectId).order('name'),
-        recentWorkRecordsQuery(todayStr).eq('project_id', currentProjectId),
-      ]);
-      if (machinesRes.error || recordsRes.error) {
-        setError((machinesRes.error || recordsRes.error)!.message);
-      } else {
-        setError(null);
-        setMachines(withLiveStatus(
-          (machinesRes.data as DbMachine[]).map(machineFromDb),
-          (recordsRes.data || []) as RecentWorkRecord[],
-          todayStr,
-        ));
-      }
-      setLoading(false);
-    };
-    load();
-  }, [currentProjectId, ready, timezone, reloadKey]);
-
-  return { machines, loading, error, reload };
+  return {
+    machines: query.data ?? NO_MACHINES,
+    // Still waiting for the project to be known counts as loading; no project means nothing to load.
+    loading: !ready || (enabled && query.isPending),
+    error: query.error ? query.error.message : null,
+    reload,
+  };
 }

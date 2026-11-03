@@ -19,7 +19,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from('app_settings').select('currency, timezone').eq('id', 1).maybeSingle();
+      const { data, error } = await supabase.from('app_settings').select('currency, timezone').eq('id', 1).maybeSingle();
+      // Fall back to the defaults so pages still work; Settings shows the failure.
+      if (error) console.error('AppSettings: could not load currency/timezone, using defaults', error);
       if (data?.currency) setCurrency(data.currency);
       if (data?.timezone && isValidTimeZone(data.timezone)) setTimezone(data.timezone);
     };

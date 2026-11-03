@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, AlertCircle, X, Info } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -30,12 +30,13 @@ const BG: Record<ToastType, string> = {
 
 function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: string) => void }) {
   useEffect(() => {
-    const t = setTimeout(() => onRemove(toast.id), 3500);
+    // Errors stay up longer: they usually carry a message the user needs to read.
+    const t = setTimeout(() => onRemove(toast.id), toast.type === 'error' ? 7000 : 3500);
     return () => clearTimeout(t);
-  }, [toast.id, onRemove]);
+  }, [toast.id, toast.type, onRemove]);
 
   return (
-    <div className={`flex items-start gap-3 p-4 rounded-lg border card-shadow-md slide-up min-w-[280px] max-w-sm ${BG[toast.type]}`}>
+    <div role={toast.type === 'error' ? 'alert' : 'status'} className={`flex items-start gap-3 p-4 rounded-lg border card-shadow-md slide-up min-w-[280px] max-w-sm ${BG[toast.type]}`}>
       <div className="flex-shrink-0 mt-0.5">{ICONS[toast.type]}</div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-600 text-foreground">{toast.title}</p>
@@ -61,14 +62,16 @@ export function ToastContainer({ toasts, onRemove }: ToastProps) {
 export function useToast() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const addToast = (type: ToastType, title: string, message?: string) => {
+  // Stable identities: ToastItem's dismiss timer depends on onRemove, so a new
+  // function on every render would restart the timer and the toast would never close.
+  const addToast = useCallback((type: ToastType, title: string, message?: string) => {
     const id = `toast-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     setToasts(prev => [...prev, { id, type, title, message }]);
-  };
+  }, []);
 
-  const removeToast = (id: string) => {
+  const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
-  };
+  }, []);
 
   return { toasts, addToast, removeToast };
 }

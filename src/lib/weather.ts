@@ -4,9 +4,11 @@ export interface GeocodedLocation {
   longitude: number;
 }
 
+// Resolves to null when the place isn't found. Throws when the lookup service can't
+// be reached, so callers can tell "no such place" apart from "try again later".
 export async function geocodeLocation(query: string): Promise<GeocodedLocation | null> {
   const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1`);
-  if (!res.ok) return null;
+  if (!res.ok) throw new Error(`Location search failed (HTTP ${res.status})`);
   const data = await res.json();
   const result = data?.results?.[0];
   if (!result) return null;
@@ -32,12 +34,19 @@ export interface WeatherSnapshot {
   hourly: HourPoint[];
 }
 
+// Resolves to null on any failure (offline, service down, unexpected response).
 export async function fetchWeather(lat: number, lon: number): Promise<WeatherSnapshot | null> {
-  const res = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,is_day&timezone=auto`
-  );
-  if (!res.ok) return null;
-  const data = await res.json();
+  let data;
+  try {
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,is_day&timezone=auto`
+    );
+    if (!res.ok) return null;
+    data = await res.json();
+  } catch (err) {
+    console.error('fetchWeather failed', err);
+    return null;
+  }
   if (data?.current?.temperature_2m === undefined) return null;
 
   const currentHourKey = String(data.current.time).slice(0, 13);

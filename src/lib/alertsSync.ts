@@ -1,5 +1,8 @@
 import { supabase } from './supabaseClient';
 import type { DbAlert } from './alerts';
+import { friendlyError } from './errors';
+import { invalidateFleetData } from './queryClient';
+import { fetchAllRows } from './fetchAll';
 
 // Used when app_settings has no due_soon_threshold. Matches the column's default in
 // the database (20) and what Settings shows.
@@ -26,6 +29,12 @@ type MaintRow = {
   status: string;
 };
 
+const chunk = <T,>(items: T[], size = 200): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+};
+
 const partKey = (part: string) => part.trim().toLowerCase();
 const partSlug = (part: string) => partKey(part).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'part';
 
@@ -47,33 +56,54 @@ function sameAlert(a: DbAlert, b: DbAlert): boolean {
 //   - machines.maint_status: the worst status across that machine's parts
 //   - maintenance_records.status: Active / Due / Overdue on the record that governs
 //     each countdown; superseded records are Active
-export async function syncAlerts(projectId?: string | null) {
-  let machinesQuery = supabase.from('machines').select('id, name, machine_code, total_lifetime_hours, maint_status, project_id');
-  let maintQuery = supabase.from('maintenance_records')
-    .select('id, machine_id, part_repaired_or_replaced, hours_at_maintenance, recommended_hours_until_next, status')
-    .order('maintenance_date', { ascending: false })
-    .order('created_at', { ascending: false });
-  let alertsQuery = supabase.from('alerts').select('*');
-  if (projectId) {
-    machinesQuery = machinesQuery.eq('project_id', projectId);
-    maintQuery = maintQuery.eq('project_id', projectId);
-    alertsQuery = alertsQuery.eq('project_id', projectId);
-  }
+//
+// Returns null on success, or a user-facing message if the alerts could not be
+// brought up to date (callers should say the alerts shown may be out of date).
+export async function syncAlerts(projectId?: string | null): Promise<string | null> {
+  // Every row is needed (a missing service record would give a wrong countdown), so
+  // each table is read in batches rather than trusting a single capped request.
+  const machinesRes = fetchAllRows<MachineRow>((from, to) => {
+    let q = supabase.from('machines').select('id, name, machine_code, total_lifetime_hours, maint_status, project_id');
+    if (projectId) q = q.eq('project_id', projectId);
+    return q.order('id').range(from, to);
+  });
+  const maintRes = fetchAllRows<MaintRow>((from, to) => {
+    let q = supabase.from('maintenance_records')
+      .select('id, machine_id, part_repaired_or_replaced, hours_at_maintenance, recommended_hours_until_next, status');
+    if (projectId) q = q.eq('project_id', projectId);
+    return q
+      .order('maintenance_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id')
+      .range(from, to);
+  });
+  const alertsRes = fetchAllRows<DbAlert>((from, to) => {
+    let q = supabase.from('alerts').select('*');
+    if (projectId) q = q.eq('project_id', projectId);
+    return q.order('id').range(from, to);
+  });
 
-  const [machinesRes, maintRes, alertsRes, settingsRes] = await Promise.all([
-    machinesQuery,
-    maintQuery,
-    alertsQuery,
+  const [machinesData, maintData, alertsData, settingsRes] = await Promise.all([
+    machinesRes,
+    maintRes,
+    alertsRes,
     supabase.from('app_settings').select('due_soon_threshold, auto_reset').eq('id', 1).maybeSingle(),
   ]);
-  if (machinesRes.error || maintRes.error || alertsRes.error) {
-    console.error('syncAlerts: could not load data', machinesRes.error || maintRes.error || alertsRes.error);
-    return;
+  const loadError = machinesData.error || maintData.error || alertsData.error;
+  if (loadError) {
+    console.error('syncAlerts: could not load data', loadError);
+    return friendlyError(loadError);
+  }
+  // Without settings we would compute with the default threshold and could create or
+  // delete alerts wrongly, so stop rather than guess.
+  if (settingsRes.error) {
+    console.error('syncAlerts: could not load settings', settingsRes.error);
+    return friendlyError(settingsRes.error);
   }
 
-  const machines = (machinesRes.data || []) as MachineRow[];
-  const maintRecords = (maintRes.data || []) as MaintRow[];
-  const existingAlerts = (alertsRes.data || []) as DbAlert[];
+  const machines = machinesData.data;
+  const maintRecords = maintData.data;
+  const existingAlerts = alertsData.data;
   const dueSoonThreshold = settingsRes.data?.due_soon_threshold ?? DEFAULT_DUE_SOON_THRESHOLD;
   const autoReset = settingsRes.data?.auto_reset ?? true;
 
@@ -135,13 +165,21 @@ export async function syncAlerts(projectId?: string | null) {
     if (next && r.status !== next) recordUpdates.set(next, [...(recordUpdates.get(next) || []), r.id]);
   }
 
+  // Ids go in the request URL, so long lists are split to stay under URL size limits.
   const writes = [
     toUpsert.length ? supabase.from('alerts').upsert(toUpsert) : null,
-    toDelete.length ? supabase.from('alerts').delete().in('id', toDelete) : null,
-    ...[...machineUpdates].map(([status, ids]) => supabase.from('machines').update({ maint_status: status }).in('id', ids)),
-    ...[...recordUpdates].map(([status, ids]) => supabase.from('maintenance_records').update({ status }).in('id', ids)),
+    ...chunk(toDelete).map(ids => supabase.from('alerts').delete().in('id', ids)),
+    ...[...machineUpdates].flatMap(([status, ids]) => chunk(ids).map(part => supabase.from('machines').update({ maint_status: status }).in('id', part))),
+    ...[...recordUpdates].flatMap(([status, ids]) => chunk(ids).map(part => supabase.from('maintenance_records').update({ status }).in('id', part))),
   ].filter(Boolean);
 
   const results = await Promise.all(writes);
-  results.forEach(res => { if (res?.error) console.error('syncAlerts: write failed', res.error); });
+  // Alerts and machines.maint_status changed: refresh the cached fleet data and badges.
+  if (writes.length) invalidateFleetData();
+  const failed = results.find(res => res?.error)?.error;
+  if (failed) {
+    results.forEach(res => { if (res?.error) console.error('syncAlerts: write failed', res.error); });
+    return friendlyError(failed);
+  }
+  return null;
 }

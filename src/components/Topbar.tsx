@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useNavCounts } from '@/lib/useNavCounts';
-import TemperatureWidget from '@/app/admin-dashboard/components/TemperatureWidget';
+import TemperatureWidget from './TemperatureWidget';
 import type { UserRole } from '@/lib/useUserRole';
 import { useAppSettings } from '@/lib/AppSettingsContext';
 import { formatLongDateInTz, formatTimeInTz } from '@/lib/format';

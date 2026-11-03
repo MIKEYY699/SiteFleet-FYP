@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Eye, EyeOff, Loader2, HardHat, AlertCircle, CheckCircle2, ClipboardList, Wrench, BarChart3 } from 'lucide-react';
 import { supabase, setRememberMe } from '@/lib/supabaseClient';
+import { friendlyError } from '@/lib/errors';
 
 interface FormData {
   fullName: string;
@@ -47,7 +48,7 @@ export default function LoginClient() {
     setRememberMe(data.rememberMe);
     const { error } = await supabase.auth.signInWithPassword({ email: data.email, password: data.password });
     if (error) {
-      setFormError(error.message);
+      setFormError(friendlyError(error));
       setIsLoading(false);
       return;
     }
@@ -64,7 +65,7 @@ export default function LoginClient() {
       options: { data: { full_name: data.fullName } },
     });
     if (error) {
-      setFormError(error.message);
+      setFormError(friendlyError(error));
       setIsLoading(false);
       return;
     }
@@ -88,7 +89,7 @@ export default function LoginClient() {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     if (error) {
-      setFormError(error.message);
+      setFormError(friendlyError(error));
       return;
     }
     setFormError('');

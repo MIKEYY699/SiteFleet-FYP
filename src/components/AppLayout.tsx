@@ -9,38 +9,63 @@ import { ProjectProvider } from '@/lib/ProjectContext';
 import { AppSettingsProvider } from '@/lib/AppSettingsContext';
 import { RoleProvider } from '@/lib/RoleContext';
 import RouteLoadingBar from './RouteLoadingBar';
+import LoadError from './ui/LoadError';
 import { Loader2 } from 'lucide-react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { getQueryClient } from '@/lib/queryClient';
 import type { Session } from '@supabase/supabase-js';
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  currentPath?: string;
 }
 
-export default function AppLayout({ children, currentPath }: AppLayoutProps) {
+// The signed-in app shell (auth check, sidebar, topbar, providers). Rendered once by
+// app/(app)/layout.tsx, so it stays mounted while moving between pages: no session
+// re-check, sidebar state is kept, and settings/badges/weather aren't refetched.
+export default function AppLayout({ children }: AppLayoutProps) {
+  const queryClient = getQueryClient();
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppShell>{children}</AppShell>
+    </QueryClientProvider>
+  );
+}
+
+function AppShell({ children }: AppLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const resolvedPath = currentPath ?? pathname ?? '/';
+  const queryClient = getQueryClient();
+  const resolvedPath = pathname ?? '/';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  // Bumping refreshKey remounts the page so every widget refetches; lastLoadedAt
-  // records when that happened so the topbar's "Updated" time is truthful.
+  // Refresh in the topbar: drop cached queries and remount the shell so every widget
+  // refetches; lastLoadedAt records when, so the topbar's "Updated" time is truthful.
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastLoadedAt, setLastLoadedAt] = useState(() => new Date());
-  const { role, loading: roleLoading } = useUserRole(session?.user?.id);
+  const { role, loading: roleLoading, error: roleError, retry: retryRole } = useUserRole(session?.user?.id);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setCheckingAuth(false);
-      if (!data.session) router.replace('/sign-up-login-screen');
-    });
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+        if (!data.session) router.replace('/sign-up-login-screen');
+      })
+      .catch(err => {
+        // Unreadable stored session: treat as signed out rather than spinning forever.
+        console.error('AppLayout: could not read session', err);
+        router.replace('/sign-up-login-screen');
+      })
+      .finally(() => setCheckingAuth(false));
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
-      if (!newSession) router.replace('/sign-up-login-screen');
+      if (!newSession) {
+        // Don't keep one user's cached data around for whoever signs in next.
+        queryClient.clear();
+        router.replace('/sign-up-login-screen');
+      }
     });
 
     return () => listener.subscription.unsubscribe();
@@ -53,6 +78,22 @@ export default function AppLayout({ children, currentPath }: AppLayoutProps) {
       router.replace('/admin-dashboard');
     }
   }, [role, roleLoading, resolvedPath, router]);
+
+  if (session && roleError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
+        <div className="w-full max-w-md space-y-3">
+          <LoadError title="Could not load your account" message={roleError} onRetry={retryRole} />
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="w-full text-center text-xs font-600 text-muted-foreground hover:text-foreground"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (checkingAuth || !session || roleLoading) {
     return (
@@ -91,7 +132,11 @@ export default function AppLayout({ children, currentPath }: AppLayoutProps) {
             role={role}
             currentPath={resolvedPath}
             lastUpdated={lastLoadedAt}
-            onRefresh={() => { setRefreshKey(k => k + 1); setLastLoadedAt(new Date()); }}
+            onRefresh={() => {
+              queryClient.invalidateQueries();
+              setRefreshKey(k => k + 1);
+              setLastLoadedAt(new Date());
+            }}
           />
           <main className="flex-1 overflow-y-auto scrollbar-thin">
             <div className="px-4 py-6 lg:px-6 xl:px-8 2xl:px-10 max-w-screen-2xl mx-auto">
